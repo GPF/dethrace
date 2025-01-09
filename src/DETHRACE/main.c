@@ -64,9 +64,9 @@ int main(int argc, char* argv[]) {
         }
     }
 #endif
-#ifdef __DREAMCAST__
-    fs_chdir("/cd/dethrace");
-#endif    
+// #ifdef __DREAMCAST__
+//     fs_chdir("/cd/dethrace");
+// #endif    
     Harness_Init(&argc, argv);
 
     return original_main(argc, argv);

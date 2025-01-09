@@ -16,16 +16,19 @@ int render_width, render_height;
 Uint32 last_frame_time;
 
 uint8_t directinput_key_state[SDL_NUM_SCANCODES];
-
+#include <kos.h>
 static void* create_window_and_renderer(char* title, int x, int y, int width, int height) {
+    // gdb_init();
     render_width = width;
     render_height = height;
+            SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_TEXTURED_VIDEO");
+        // SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_DIRECT_VIDEO"); 
     SDL_SetHint(SDL_HINT_VIDEO_DOUBLE_BUFFER, "1");
     if (SDL_Init(SDL_INIT_VIDEO| SDL_INIT_JOYSTICK) != 0) {
         LOG_PANIC("SDL_INIT_VIDEO error: %s", SDL_GetError());
     }
-        SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_TEXTURED_VIDEO");
-        // SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_DIRECT_VIDEO"); 
+
+
     window = SDL_CreateWindow(title,
         SDL_WINDOWPOS_CENTERED,
         SDL_WINDOWPOS_CENTERED,
@@ -44,10 +47,13 @@ static void* create_window_and_renderer(char* title, int x, int y, int width, in
     if (renderer == NULL) {
         LOG_PANIC("Failed to create renderer: %s", SDL_GetError());
     }
+                printf("HERE\n");
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+        printf("HERE2\n");
     SDL_RenderSetLogicalSize(renderer, render_width, render_height);
-
+         printf("HERE3: width %d. height %d\n ", width, height);
     screen_texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, width, height);
+        printf("HERE4\n");
     if (screen_texture == NULL) {
         SDL_RendererInfo info;
         SDL_GetRendererInfo(renderer, &info);
@@ -56,19 +62,19 @@ static void* create_window_and_renderer(char* title, int x, int y, int width, in
         }
         LOG_PANIC("Failed to create screen_texture: %s", SDL_GetError());
     }
-
+    printf("HERE5\n");
     return window;
 }
 
 static int set_window_pos(void* hWnd, int x, int y, int nWidth, int nHeight) {
-#ifndef __DREAAMCAST__    
+// #ifndef __DREAMCAST__    
     // SDL_SetWindowPosition(hWnd, x, y);
     if (nWidth == 320 && nHeight == 200) {
         nWidth = 640;
         nHeight = 400;
     }
     SDL_SetWindowSize(hWnd, nWidth, nHeight);
-#endif    
+// #endif    
     return 0;
 }
 

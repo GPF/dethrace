@@ -11,6 +11,7 @@
 #include <execinfo.h>
 #include <link.h>
 #include <libgen.h>
+#include <termios.h>
 #endif
 
 #include <errno.h>
@@ -22,16 +23,17 @@
 #include <signal.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include <stdio.h>
+#include <stdio.h>      
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <termios.h>
+
 #include <time.h>
 #include <unistd.h>
 
 #ifdef __DREAMCAST__
+#include <sys/termios.h>
 char* my_dirname(const char* path) {
     const char* lastSlash = strrchr(path, '/');
     const char* lastBackslash = strrchr(path, '\\');

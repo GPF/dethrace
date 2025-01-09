@@ -961,12 +961,15 @@ int original_main(int pArgc, char** pArgv) {
             Usage(pArgv[0]);
         }
     }
-    // gCar_simplification_level = 0;
-    // gCut_scene_override = 1;
-    // gReplay_override = 1;
-    // gSound_override = 1;
-    // gAustere_override = 1;
-
+#ifdef __DREAMCAST__    
+    gGraf_spec_index = 0;
+    gYon_multiplier = 0.9;
+    gCar_simplification_level = 0;
+    gCut_scene_override = 0;
+    gReplay_override = 0;
+    gSound_override = 1;
+    gAustere_override = 0;
+#endif
     gNetwork_profile_fname[0] = 0;
     uint32_t len = GetCurrentDirectoryA_(240, gNetwork_profile_fname);
     if (len > 0 && len == strlen(gNetwork_profile_fname)) {
