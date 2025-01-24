@@ -5,7 +5,7 @@
 #include "harness/hooks.h"
 #include "harness/trace.h"
 #include "sdl2_scancode_to_dinput.h"
-
+#include "sdl2_gamepad_to_dinput.h"
 SDL_Window* window;
 SDL_Renderer* renderer;
 SDL_Texture* screen_texture;
@@ -19,15 +19,19 @@ uint8_t directinput_key_state[SDL_NUM_SCANCODES];
 #include <kos.h>
 static void* create_window_and_renderer(char* title, int x, int y, int width, int height) {
     // gdb_init();
+    SDL_setenv("SDL_AUDIODRIVER", "dummy", 1);
     render_width = width;
     render_height = height;
-            SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_TEXTURED_VIDEO");
+            // SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_TEXTURED_VIDEO");
         // SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_DIRECT_VIDEO"); 
-    SDL_SetHint(SDL_HINT_VIDEO_DOUBLE_BUFFER, "1");
-    if (SDL_Init(SDL_INIT_VIDEO| SDL_INIT_JOYSTICK) != 0) {
+    // SDL_SetHint(SDL_HINT_VIDEO_DOUBLE_BUFFER, "1");
+    if (SDL_Init(SDL_INIT_VIDEO| SDL_INIT_JOYSTICK| SDL_INIT_GAMECONTROLLER) != 0) {
         LOG_PANIC("SDL_INIT_VIDEO error: %s", SDL_GetError());
     }
 
+    // if(SDL_InitSubSystem(SDL_INIT_GAMECONTROLLER) != 0) {
+    //     LOG_WARN("SDL_INIT_GAMECONTROLLER error: %s", SDL_GetError());
+    // }
 
     window = SDL_CreateWindow(title,
         SDL_WINDOWPOS_CENTERED,
@@ -42,7 +46,8 @@ static void* create_window_and_renderer(char* title, int x, int y, int width, in
     if (harness_game_config.start_full_screen) {
         SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN_DESKTOP);
     }
-
+    // SDL_SetHint(SDL_HINT_RENDER_DRIVER, "software");
+    // SDL_SetHint(SDL_HINT_RENDER_VSYNC, "1");
     renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_PRESENTVSYNC);
     if (renderer == NULL) {
         LOG_PANIC("Failed to create renderer: %s", SDL_GetError());
@@ -95,53 +100,57 @@ static int get_and_handle_message(MSG_* msg) {
     SDL_Event event;
     int dinput_key;
 
-    while (SDL_PollEvent(&event)) {
-
+     while (SDL_PollEvent(&event)) {
         switch (event.type) {
-                       
-        case SDL_KEYDOWN:
-        case SDL_KEYUP:
-            // if (event.key.windowID != SDL_GetWindowID(window)) {
-            //     continue;
-            // }
-        // printf("key: %s\n",event.key.keysym.sym);
-            if (event.key.keysym.sym == SDLK_RETURN) {
-                if (event.key.type == SDL_KEYDOWN) {
-                    if ((event.key.keysym.mod & (KMOD_CTRL | KMOD_SHIFT | KMOD_ALT | KMOD_GUI))) {
-                        // Ignore keydown of RETURN when used together with some modifier
-                        return 0;
+            case SDL_KEYDOWN:
+            case SDL_KEYUP:
+                dinput_key = sdlScanCodeToDirectInputKeyNum[event.key.keysym.scancode];
+                if (dinput_key != 0) {
+                    directinput_key_state[dinput_key] = (event.type == SDL_KEYDOWN ? 0x80 : 0);
+                }
+                break;
+
+            case SDL_CONTROLLERDEVICEADDED:
+                SDL_GameControllerOpen(event.cdevice.which);
+                break;
+
+            case SDL_CONTROLLERBUTTONDOWN:
+            case SDL_CONTROLLERBUTTONUP:
+                dinput_key = sdlGamepadToDirectInputKeyNum.buttonMapping[event.cbutton.button];
+                if (dinput_key != 0) {
+                    directinput_key_state[dinput_key] = (event.type == SDL_CONTROLLERBUTTONDOWN ? 0x80 : 0);
+                }
+                break;
+
+            case SDL_CONTROLLERAXISMOTION:
+                if (event.caxis.value > 16000) {  // Axis positive
+                    dinput_key = sdlGamepadToDirectInputKeyNum.axisPositive[event.caxis.axis];
+                    if (dinput_key != 0) {
+                        directinput_key_state[dinput_key] = 0x80;
                     }
-                } else if (event.key.type == SDL_KEYUP) {
-                    if (is_only_key_modifier(event.key.keysym.mod, KMOD_ALT)) {
-                        SDL_SetWindowFullscreen(window, (SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN_DESKTOP) ? 0 : SDL_WINDOW_FULLSCREEN_DESKTOP);
+                } else if (event.caxis.value < -16000) {  // Axis negative
+                    dinput_key = sdlGamepadToDirectInputKeyNum.axisNegative[event.caxis.axis];
+                    if (dinput_key != 0) {
+                        directinput_key_state[dinput_key] = 0x80;
+                    }
+                } else {  // Reset when neutral
+                    directinput_key_state[sdlGamepadToDirectInputKeyNum.axisPositive[event.caxis.axis]] = 0x00;
+                    directinput_key_state[sdlGamepadToDirectInputKeyNum.axisNegative[event.caxis.axis]] = 0x00;
+                }
+                break;
+
+            case SDL_WINDOWEVENT:
+                if (event.window.event == SDL_WINDOWEVENT_CLOSE) {
+                    if (SDL_GetWindowID(window) == event.window.windowID) {
+                        msg->message = WM_QUIT;
+                        return 1;
                     }
                 }
-            }
+                break;
 
-            // Map incoming SDL scancode to DirectInput DIK_* key code.
-            // https://github.com/DanielGibson/Snippets/blob/master/sdl2_scancode_to_dinput.h
-            dinput_key = sdlScanCodeToDirectInputKeyNum[event.key.keysym.scancode];
-            if (dinput_key == 0) {
-                LOG_WARN("unexpected scan code %s (%d)", SDL_GetScancodeName(event.key.keysym.scancode), event.key.keysym.scancode);
-                return 0;
-            }
-            // DInput expects high bit to be set if key is down
-            // https://learn.microsoft.com/en-us/previous-versions/windows/desktop/ee418261(v=vs.85)
-            directinput_key_state[dinput_key] = (event.type == SDL_KEYDOWN ? 0x80 : 0);
-            break;
-
-        case SDL_WINDOWEVENT:
-            if (event.window.event == SDL_WINDOWEVENT_CLOSE) {
-                if (SDL_GetWindowID(window) == event.window.windowID) {
-                    msg->message = WM_QUIT;
-                    return 1;
-                }
-            }
-            break;
-
-        case SDL_QUIT:
-            msg->message = WM_QUIT;
-            return 1;
+            case SDL_QUIT:
+                msg->message = WM_QUIT;
+                return 1;
         }
     }
     return 0;
@@ -225,7 +234,7 @@ static void present_screen(br_pixelmap* src) {
 
 static void set_palette(PALETTEENTRY_* pal) {
     for (int i = 0; i < 256; i++) {
-        converted_palette[i] = (0xff << 24 | pal[i].peRed << 16 | pal[i].peGreen << 8 | pal[i].peBlue);
+        converted_palette[i] = (0xff << 24 | pal[i].peBlue << 16 | pal[i].peGreen << 8 | pal[i].peRed);
     }
     if (last_screen_src != NULL) {
         present_screen(last_screen_src);

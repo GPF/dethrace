@@ -33,7 +33,20 @@
 #include <unistd.h>
 
 #ifdef __DREAMCAST__
-#include <sys/termios.h>
+// A stub of termios structure for Dreamcast (no termios.h)
+typedef unsigned int tcflag_t;
+typedef unsigned char cc_t;
+
+#define NCCS 32  // Number of control characters (default)
+
+struct termios {
+    tcflag_t c_iflag;       // Input modes (flags)
+    tcflag_t c_oflag;       // Output modes (flags)
+    tcflag_t c_cflag;       // Control modes (flags)
+    tcflag_t c_lflag;       // Local modes (flags)
+    cc_t c_cc[NCCS];        // Control characters (e.g., interrupt, erase, etc.)
+};
+
 char* my_dirname(const char* path) {
     const char* lastSlash = strrchr(path, '/');
     const char* lastBackslash = strrchr(path, '\\');
