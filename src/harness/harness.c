@@ -197,7 +197,7 @@ void Harness_Init(int* argc, char* argv[]) {
     }
 #endif
 #ifdef __DREAMCAST__
-    char* root_dir = strdup("/cd/dethrace/");
+    char* root_dir = strdup("/cd/DETHRACE/");
 #else
     char* root_dir = getenv("DETHRACE_ROOT_DIR");
 #endif

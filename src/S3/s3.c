@@ -52,6 +52,7 @@ char gS3_current_dir[260];
 int dword_5216C0;
 
 int S3Init(char* pPath, int pLow_memory_mode) {
+    printf("S3Init");
     tS3_descriptor* root_descriptor;
 
     gS3_noutlets = 0;
@@ -1205,7 +1206,7 @@ char* S3GetCurrentDir(void) {
 tS3_descriptor* S3GetDescriptorByID(tS3_sound_tag id) {
     tS3_descriptor* d; // [esp+Ch] [ebp-4h]
 
-    assert(id != 0);
+    assert(id != 0); //DANGER
 
     for (d = gS3_descriptors;; d = d->next) {
         if (!d) {

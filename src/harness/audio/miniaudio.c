@@ -47,25 +47,103 @@ ma_engine engine;
 ma_sound cda_sound;
 int cda_sound_initialized;
 
-tAudioBackend_error_code AudioBackend_Init(void) {
-    ma_result result;
-    ma_engine_config config;
+#include <kos.h>
+#include <math.h>
+#include <dc/sound/stream.h>
+#include <SDL2/SDL.h>
 
-    config = ma_engine_config_init();
-    result = ma_engine_init(&config, &engine);
-    if (result != MA_SUCCESS) {
-        printf("Failed to initialize audio engine.");
-        return eAB_error;
+#define NUM_SAMPLES (2048) // 2048
+#define NUM_CHANNELS (2)
+#define SAMPLERATE (48000)
+
+static float g_volume_multiplier = 1.0f;
+
+void data_callback(void* pUserData, Uint8* pBuffer, int bufferSizeInBytes) {
+    //    Each sample is a float (4 bytes), each frame has 'NUM_CHANNELS' samples.
+    //    However, we requested 16-bit output from SDL, so we need to ensure
+    //    we read the correct number of float frames from MiniAudio.
+
+    // We'll compute frames based on 16-bit stereo => 4 bytes per frame.
+    // bufferSizeInBytes is total bytes. For stereo 16-bit => 4 bytes/frame.
+    int framesRequested = bufferSizeInBytes / (sizeof(int16_t) * NUM_CHANNELS);
+
+    float floatBuffer[NUM_SAMPLES * NUM_CHANNELS];
+
+    if (framesRequested > NUM_SAMPLES) {
+        framesRequested = NUM_SAMPLES;
     }
-    LOG_INFO("Playback device: '%s'", engine.pDevice->playback.name);
-    ma_engine_set_volume(&engine, harness_game_config.volume_multiplier);
 
+    ma_engine_read_pcm_frames(&engine, floatBuffer, framesRequested, NULL);
+
+    int16_t *pBufferS16 = (int16_t *)pBuffer;
+    for (int i = 0; i < framesRequested * NUM_CHANNELS; i++) {
+        float s = floatBuffer[i] * g_volume_multiplier; // apply volume
+        if (s > 1.0f)  s = 1.0f;
+        if (s < -1.0f) s = -1.0f;
+        pBufferS16[i] = (int16_t)(s * 32767.0f);
+    }
+
+    // If SDL wants more frames than we read, zero them out
+    int totalFramesSDL = bufferSizeInBytes / (sizeof(int16_t) * NUM_CHANNELS);
+    int leftoverFrames = totalFramesSDL - framesRequested;
+    if (leftoverFrames > 0) {
+        memset(&pBufferS16[framesRequested * NUM_CHANNELS], 0,
+               leftoverFrames * NUM_CHANNELS * sizeof(int16_t));
+    }
+}
+
+tAudioBackend_error_code AudioBackend_Init(void) {
+
+    ma_engine_config config = ma_engine_config_init();
+    config.noDevice   = MA_TRUE;
+    config.channels   = NUM_CHANNELS;
+    config.sampleRate = SAMPLERATE;
+
+    ma_result result = ma_engine_init(&config, &engine);
+    if (result != MA_SUCCESS) {
+        printf("Failed to init MiniAudio engine. Error code: %x\n", result);
+        return -1;
+    }
+
+    if (SDL_InitSubSystem(SDL_INIT_AUDIO) != 0) {
+        printf("Failed to init SDL audio subsystem. SDL Error: %s\n", SDL_GetError());
+        return -1;
+    }
+
+    SDL_AudioSpec desiredSpec, obtainedSpec;
+    memset(&desiredSpec, 0, sizeof(desiredSpec));
+    desiredSpec.freq     = SAMPLERATE;         
+    desiredSpec.format   = AUDIO_S16SYS;        
+    desiredSpec.channels = NUM_CHANNELS;       
+    desiredSpec.samples  = NUM_SAMPLES;       
+    desiredSpec.callback = data_callback;      
+    desiredSpec.userdata = NULL;                
+
+    SDL_AudioDeviceID deviceID = SDL_OpenAudioDevice(
+        NULL, 0, &desiredSpec, &obtainedSpec, SDL_AUDIO_ALLOW_FORMAT_CHANGE
+    );
+    if (deviceID == 0) {
+        printf("Failed to open SDL audio device: %s\n", SDL_GetError());
+        return -1;
+    }
+
+    printf("Audio Init:\n");
+    printf("  freq    = %d\n", obtainedSpec.freq);
+    printf("  format  = 0x%x\n", obtainedSpec.format);
+    printf("  channels= %d\n", obtainedSpec.channels);
+    printf("  samples = %d\n", obtainedSpec.samples);
+
+    SDL_PauseAudioDevice(deviceID, 0);
+
+    ma_engine_set_volume(&engine, 1.0f);
+
+    printf("Audio backend initialized successfully.\n");
     return eAB_success;
 }
 
 tAudioBackend_error_code AudioBackend_InitCDA(void) {
     // check if music files are present or not
-    if (access("MUSIC/Track02.ogg", F_OK) == -1) {
+    if (access("/cd/MUSIC/Track02.ogg", F_OK) == -1) {
         return eAB_error;
     }
     return eAB_success;
@@ -94,7 +172,7 @@ tAudioBackend_error_code AudioBackend_PlayCDA(int track) {
     char path[256];
     ma_result result;
 
-    sprintf(path, "MUSIC/Track0%d.ogg", track);
+    sprintf(path, "/cd/MUSIC/Track0%d.ogg", track);
 
     if (access(path, F_OK) == -1) {
         return eAB_error;

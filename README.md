@@ -119,6 +119,10 @@ Dethrace and any of its' maintainers are in no way associated with or endorsed b
 cmake   -DCMAKE_TOOLCHAIN_FILE="$KOS_CMAKE_TOOLCHAIN" -D__DREAMCAST__=1 -DSDL2_DIR="/opt/toolchains/dc/kos/addons/lib/dreamcast/cmake/SDL2"   -DSDL2_INCLUDE_DIRS="/opt/toolchains/dc/kos/addons/include/SDL2"   -DSDL2_LIBRARIES="/opt/toolchains/dc/kos/addons/lib/dreamcast/libSDL2.a;/opt/toolchains/dc/kos/addons/lib/dreamcast/libSDL2main.a"   -Bbuild
 
 
+rebuild kos with bigger stack size
+```bash
+make -j8 CFLAGS=-DTHD_KERNEL_STACK_SIZE=512000 all
+```
 
 https://github.com/user-attachments/assets/8d8f664d-293e-4c1c-be33-e7077d0c19c1
 

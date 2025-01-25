@@ -19,13 +19,13 @@ uint8_t directinput_key_state[SDL_NUM_SCANCODES];
 #include <kos.h>
 static void* create_window_and_renderer(char* title, int x, int y, int width, int height) {
     // gdb_init();
-    SDL_setenv("SDL_AUDIODRIVER", "dummy", 1);
+    //SDL_setenv("SDL_AUDIODRIVER", "dummy", 1);
     render_width = width;
     render_height = height;
             // SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_TEXTURED_VIDEO");
         // SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_DIRECT_VIDEO"); 
     // SDL_SetHint(SDL_HINT_VIDEO_DOUBLE_BUFFER, "1");
-    if (SDL_Init(SDL_INIT_VIDEO| SDL_INIT_JOYSTICK| SDL_INIT_GAMECONTROLLER) != 0) {
+    if (SDL_Init(SDL_INIT_VIDEO| SDL_INIT_AUDIO | SDL_INIT_JOYSTICK| SDL_INIT_GAMECONTROLLER) != 0) {
         LOG_PANIC("SDL_INIT_VIDEO error: %s", SDL_GetError());
     }
 
