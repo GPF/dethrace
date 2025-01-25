@@ -149,8 +149,8 @@ export KOS_CFLAGS="${KOS_CFLAGS} -O3"
 # Controls whether frame pointers are emitted or not. Disabled by
 # default. Enable them if you plan to use GDB for debugging.
 #
-export KOS_CFLAGS="${KOS_CFLAGS} -fomit-frame-pointer"
-#export KOS_CFLAGS="${KOS_CFLAGS} -fno-omit-frame-pointer -DFRAME_POINTERS"
+#export KOS_CFLAGS="${KOS_CFLAGS} -fomit-frame-pointer"
+export KOS_CFLAGS="${KOS_CFLAGS} -fno-omit-frame-pointer -DFRAME_POINTERS"
 
 # Stack Protector
 #

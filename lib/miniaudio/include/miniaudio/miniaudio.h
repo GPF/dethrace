@@ -3731,7 +3731,7 @@ extern "C" {
 #define MA_NO_RUNTIME_LINKING 1
 //#define MA_NO_NODE_GRAPH 1
 #define MA_NO_PTHREAD_IN_HEADER 1
-#define MA_DEBUG_OUTPUT 1
+//#define MA_DEBUG_OUTPUT 1
 #endif
 
 #define MA_STRINGIFY(x)     #x

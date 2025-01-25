@@ -13,8 +13,7 @@ Dethrace is an attempt to learn how the 1997 driving/mayhem game [Carmageddon](h
 - 92% of functions implemented
 - Latest screenshot:
 
-<img width="752" alt="Screenshot 2024-05-27 at 8 44 10 AM" src="https://github.com/dethrace-labs/dethrace/assets/1063652/10b3b579-1eb1-4242-8b56-ff062cfff810">
-
+https://github.com/user-attachments/assets/3cc2f003-b69d-4d0c-9609-09fc442c7482
 
 ## Background
 Watcom debug symbols for an earlier internal build [were discovered](http://1amstudios.com/2014/12/02/carma1-symbols-dumped) named `DETHRSC.SYM` on the [Carmageddon Splat Pack](http://carmageddon.wikia.com/wiki/Carmageddon_Splat_Pack) expansion CD release. The symbols unfortunately did not match any known released executable, meaning they were interesting but not immediately usable to reverse engineer the game.
@@ -66,7 +65,7 @@ export DETHRACE_ROOT_DIR=/path/to/carmageddon
 
 Dethrace uses [git submodules](https://git-scm.com/book/en/v2/Git-Tools-Submodules), so we must pull them after the inital clone:
 ```sh
-git clone https://github.com/dethrace-labs/dethrace
+git clone https://github.com/Memorix101/dethrace-dc
 cd dethrace
 git submodule update --init --recursive
 ```
@@ -115,13 +114,14 @@ The source code in this repository is for non-commerical use only. If you use th
 
 Dethrace and any of its' maintainers are in no way associated with or endorsed by SCi, Stainless Software or THQ Nordic.
 
-# DREAMCAST build, requires dreamcast SDL2 from https://github.com/GPF/SDL2 , KOS built with -m4-single
+#### DREAMCAST build, requires dreamcast SDL2 from https://github.com/GPF/SDL2, KOS built with `make -j8 CFLAGS+=" -DTHD_KERNEL_STACK_SIZE=128000 -DTHD_STACK_SIZE=128000" all` (use gpf-environ.sh included to build dethrace)
+```bash
 cmake   -DCMAKE_TOOLCHAIN_FILE="$KOS_CMAKE_TOOLCHAIN" -D__DREAMCAST__=1 -DSDL2_DIR="/opt/toolchains/dc/kos/addons/lib/dreamcast/cmake/SDL2"   -DSDL2_INCLUDE_DIRS="/opt/toolchains/dc/kos/addons/include/SDL2"   -DSDL2_LIBRARIES="/opt/toolchains/dc/kos/addons/lib/dreamcast/libSDL2.a;/opt/toolchains/dc/kos/addons/lib/dreamcast/libSDL2main.a"   -Bbuild
-
+```
 
 rebuild kos with bigger stack size
 ```bash
-make -j8 CFLAGS=-DTHD_KERNEL_STACK_SIZE=512000 all
+make -j8 CFLAGS+=" -DTHD_KERNEL_STACK_SIZE=128000 -DTHD_STACK_SIZE=128000" all
 ```
 
 https://github.com/user-attachments/assets/8d8f664d-293e-4c1c-be33-e7077d0c19c1

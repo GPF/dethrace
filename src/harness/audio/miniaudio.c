@@ -50,11 +50,12 @@ int cda_sound_initialized;
 #include <kos.h>
 #include <math.h>
 #include <dc/sound/stream.h>
+#include <oggvorbis/sndoggvorbis.h>
 #include <SDL2/SDL.h>
 
 #define NUM_SAMPLES (2048) // 2048
 #define NUM_CHANNELS (2)
-#define SAMPLERATE (48000)
+#define SAMPLERATE (44100) // 22050 44100
 
 static float g_volume_multiplier = 1.0f;
 
@@ -116,7 +117,6 @@ ma_result ma_engine_read_pcm_frames_dc(ma_engine* pEngine, float* pFramesOut, ma
 
     return result;
 }
-
 
 void data_callback(void* pUserData, Uint8* pBuffer, int bufferSizeInBytes) {
     //    Each sample is a float (4 bytes), each frame has 'NUM_CHANNELS' samples.
@@ -221,9 +221,15 @@ tAudioBackend_error_code AudioBackend_Init(void) {
 
 tAudioBackend_error_code AudioBackend_InitCDA(void) {
     // check if music files are present or not
-    if (access("/cd/MUSIC/Track02.ogg", F_OK) == -1) {
+    if (access("MUSIC/Track02.ogg", F_OK) == -1) {
+        printf("Music not found\n");
         return eAB_error;
     }
+    printf("Music found\n");
+
+    snd_stream_init();
+    sndoggvorbis_init();
+
     return eAB_success;
 }
 
@@ -231,15 +237,21 @@ void AudioBackend_UnInit(void) {
     ma_engine_uninit(&engine);
 }
 
+// https://github.com/KallistiOS/liboggvorbisplay/blob/5cea4ada7069a372423734cbc9a94ae689c7601e/include/oggvorbis/sndoggvorbis.h#L19
+
 void AudioBackend_UnInitCDA(void) {
+    sndoggvorbis_stop();
+    sndoggvorbis_shutdown();
+    snd_stream_shutdown();
 }
 
 tAudioBackend_error_code AudioBackend_StopCDA(void) {
     if (!cda_sound_initialized) {
         return eAB_success;
     }
-    if (ma_sound_is_playing(&cda_sound)) {
+    if (sndoggvorbis_isplaying()) { //if (ma_sound_is_playing(&cda_sound)) {
         ma_sound_stop(&cda_sound);
+        //sndoggvorbis_stop();
     }
     ma_sound_uninit(&cda_sound);
     cda_sound_initialized = 0;
@@ -250,14 +262,19 @@ tAudioBackend_error_code AudioBackend_PlayCDA(int track) {
     char path[256];
     ma_result result;
 
-    sprintf(path, "/cd/MUSIC/Track0%d.ogg", track);
+    sprintf(path, "MUSIC/Track0%d.ogg", track);
 
     if (access(path, F_OK) == -1) {
         return eAB_error;
     }
 
+
+    sndoggvorbis_stop();
+    sndoggvorbis_start(path, 1); // loop me
+    cda_sound_initialized = 1;
+
     // ensure we are not still playing a track
-    AudioBackend_StopCDA();
+    /*AudioBackend_StopCDA();
 
     result = ma_sound_init_from_file(&engine, path, 0, NULL, NULL, &cda_sound);
     if (result != MA_SUCCESS) {
@@ -267,15 +284,15 @@ tAudioBackend_error_code AudioBackend_PlayCDA(int track) {
     result = ma_sound_start(&cda_sound);
     if (result != MA_SUCCESS) {
         return eAB_error;
-    }
-    return eAB_success;
+    }*/
+    return 1; // eAB_success;
 }
 
 int AudioBackend_CDAIsPlaying(void) {
     if (!cda_sound_initialized) {
         return 0;
     }
-    return ma_sound_is_playing(&cda_sound);
+    return ma_sound_is_playing(&cda_sound); //sndoggvorbis_isplaying(); 
 }
 
 tAudioBackend_error_code AudioBackend_SetCDAVolume(int volume) {
@@ -283,6 +300,7 @@ tAudioBackend_error_code AudioBackend_SetCDAVolume(int volume) {
         return eAB_error;
     }
     ma_sound_set_volume(&cda_sound, volume / 255.0f);
+    //sndoggvorbis_volume(volume / 255.0f);
     return eAB_success;
 }
 
