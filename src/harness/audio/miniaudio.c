@@ -58,6 +58,66 @@ int cda_sound_initialized;
 
 static float g_volume_multiplier = 1.0f;
 
+#include <stdint.h>
+#include <string.h>
+#include <malloc.h> 
+
+// Custom audio reading function
+ma_result ma_engine_read_pcm_frames_dc(ma_engine* pEngine, float* pFramesOut, ma_uint64 frameCount, ma_uint64* pFramesRead)
+{
+    ma_result result = MA_SUCCESS;
+    ma_uint64 totalFramesRead = 0;
+    ma_uint32 channels;
+
+    // Ensure output buffer is 4-byte aligned for SH-4
+    if (((uintptr_t)pFramesOut % 4) != 0) {
+        printf("Misaligned memory, prevent crash\n");
+        return MA_INVALID_ARGS;  // Misaligned memory, prevent crash
+    }
+
+    if (pFramesRead != NULL) {
+        *pFramesRead = 0;  // Safety initialization
+    }
+
+    if (pEngine == NULL) {
+        return MA_INVALID_ARGS;  // Handle null engine safely
+    }
+
+    channels = ma_engine_get_channels(pEngine);
+
+    // Read audio data in chunks if necessary
+    while (totalFramesRead < frameCount) {
+        ma_uint32 framesToRead = (frameCount - totalFramesRead > 0xFFFFFFFF) ? 0xFFFFFFFF : (ma_uint32)(frameCount - totalFramesRead);
+        ma_uint32 framesJustRead = 0;
+
+        // Read frames from the engine, ensuring aligned output
+        result = ma_engine_read_pcm_frames(pEngine, pFramesOut + totalFramesRead * channels, framesToRead, &framesJustRead);
+        
+        if (result != MA_SUCCESS) {
+            break;
+        }
+
+        totalFramesRead += framesJustRead;
+
+        // Avoid infinite loop in case no frames were read
+        if (framesJustRead == 0) {
+            break;
+        }
+    }
+
+    // Silence any remaining frames to prevent noise
+    if (totalFramesRead < frameCount) {
+        memset(pFramesOut + totalFramesRead * channels, 0, (frameCount - totalFramesRead) * channels * sizeof(float));
+    }
+
+    if (pFramesRead != NULL) {
+        *pFramesRead = totalFramesRead;
+    }
+
+    return result;
+}
+
+
 void data_callback(void* pUserData, Uint8* pBuffer, int bufferSizeInBytes) {
     //    Each sample is a float (4 bytes), each frame has 'NUM_CHANNELS' samples.
     //    However, we requested 16-bit output from SDL, so we need to ensure
@@ -67,13 +127,32 @@ void data_callback(void* pUserData, Uint8* pBuffer, int bufferSizeInBytes) {
     // bufferSizeInBytes is total bytes. For stereo 16-bit => 4 bytes/frame.
     int framesRequested = bufferSizeInBytes / (sizeof(int16_t) * NUM_CHANNELS);
 
-    float floatBuffer[NUM_SAMPLES * NUM_CHANNELS];
-
     if (framesRequested > NUM_SAMPLES) {
         framesRequested = NUM_SAMPLES;
     }
 
-    ma_engine_read_pcm_frames(&engine, floatBuffer, framesRequested, NULL);
+    #define AUDIO_ALIGNMENT 4
+    //float floatBuffer[NUM_SAMPLES * NUM_CHANNELS] __attribute__((aligned(4)));
+    float *floatBuffer = (float*)aligned_alloc(AUDIO_ALIGNMENT, NUM_SAMPLES * NUM_CHANNELS * sizeof(float));
+    //float* floatBuffer = (float*)memalign(4, NUM_SAMPLES * NUM_CHANNELS * sizeof(float));
+
+    if (((uintptr_t)floatBuffer % 4) != 0) {
+        printf("Memory allocation failed or misaligned.\n");
+        free(floatBuffer);
+        return;
+    }
+
+
+   ma_engine_read_pcm_frames(&engine, floatBuffer, framesRequested, NULL);
+   //ma_engine_read_pcm_frames_dc(&engine, __builtin_assume_aligned(floatBuffer, 4), framesRequested, NULL);
+   /*
+    if (result != MA_SUCCESS) {
+        printf("Error reading audio frames\n");
+        memset(pBuffer, 0, bufferSizeInBytes);
+        free(floatBuffer);
+        return;
+    }
+   */
 
     int16_t *pBufferS16 = (int16_t *)pBuffer;
     for (int i = 0; i < framesRequested * NUM_CHANNELS; i++) {
@@ -90,6 +169,7 @@ void data_callback(void* pUserData, Uint8* pBuffer, int bufferSizeInBytes) {
         memset(&pBufferS16[framesRequested * NUM_CHANNELS], 0,
                leftoverFrames * NUM_CHANNELS * sizeof(int16_t));
     }
+    free(floatBuffer);
 }
 
 tAudioBackend_error_code AudioBackend_Init(void) {
@@ -111,17 +191,15 @@ tAudioBackend_error_code AudioBackend_Init(void) {
     }
 
     SDL_AudioSpec desiredSpec, obtainedSpec;
-    memset(&desiredSpec, 0, sizeof(desiredSpec));
-    desiredSpec.freq     = SAMPLERATE;         
-    desiredSpec.format   = AUDIO_S16SYS;        
-    desiredSpec.channels = NUM_CHANNELS;       
-    desiredSpec.samples  = NUM_SAMPLES;       
-    desiredSpec.callback = data_callback;      
-    desiredSpec.userdata = NULL;                
+    MA_ZERO_OBJECT(&desiredSpec);
+    desiredSpec.freq     = SAMPLERATE;
+    desiredSpec.format   = AUDIO_S16;
+    desiredSpec.channels = NUM_CHANNELS;
+    desiredSpec.samples  = NUM_SAMPLES;
+    desiredSpec.callback = data_callback;
+    desiredSpec.userdata = NULL;            
 
-    SDL_AudioDeviceID deviceID = SDL_OpenAudioDevice(
-        NULL, 0, &desiredSpec, &obtainedSpec, SDL_AUDIO_ALLOW_FORMAT_CHANGE
-    );
+    SDL_AudioDeviceID deviceID = SDL_OpenAudioDevice(NULL, 0, &desiredSpec, &obtainedSpec, SDL_AUDIO_ALLOW_FORMAT_CHANGE);
     if (deviceID == 0) {
         printf("Failed to open SDL audio device: %s\n", SDL_GetError());
         return -1;
