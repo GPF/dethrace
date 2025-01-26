@@ -57,8 +57,6 @@ endif()
 
 set(COMMON_COMPILE_FLAGS
     -O3
-    -fno-lto 
-    -fbuiltin 
     #-flto=auto
     #-ffast-math 
     #-mfsca 
