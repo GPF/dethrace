@@ -19,7 +19,7 @@ uint8_t directinput_key_state[SDL_NUM_SCANCODES];
 #include <kos.h>
 static void* create_window_and_renderer(char* title, int x, int y, int width, int height) {
     // gdb_init();
-    dbgio_dev_select("fb");
+    //dbgio_dev_select("fb");
     //SDL_setenv("SDL_AUDIODRIVER", "dummy", 1);
     render_width = width;
     render_height = height;

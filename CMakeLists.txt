@@ -57,6 +57,14 @@ function(add_compile_flags_if_supported TARGET)
     endforeach()
 endfunction()
 
+if(DEFINED __DREAMCAST__)
+    set(PLATFORM_DREAMCAST TRUE)
+    add_compile_options(
+    #-fno-lto 
+    #-fbuiltin
+    )
+endif()
+
 IF (NOT __DREAMCAST__)
 test_big_endian(IS_BIGENDIAN)
 else()

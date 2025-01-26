@@ -121,7 +121,7 @@ cmake   -DCMAKE_TOOLCHAIN_FILE="$KOS_CMAKE_TOOLCHAIN" -D__DREAMCAST__=1 -DSDL2_D
 
 rebuild kos with bigger stack size
 ```bash
-make -j8 CFLAGS+=" -DTHD_KERNEL_STACK_SIZE=128000 -DTHD_STACK_SIZE=128000" all
+make -j$(nprocs) CFLAGS+=" -DTHD_KERNEL_STACK_SIZE=128000 -DTHD_STACK_SIZE=128000" all
 ```
 
 https://github.com/user-attachments/assets/8d8f664d-293e-4c1c-be33-e7077d0c19c1

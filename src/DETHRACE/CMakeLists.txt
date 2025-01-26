@@ -53,8 +53,8 @@ if(DETHRACE_REPLAY_DEBUG)
 endif()
 
 set(COMMON_COMPILE_FLAGS
-    -O2
-    -flto=auto
+    -O3
+    #-flto=auto
     #-ffast-math 
     #-mfsca 
     #-mfsrra
