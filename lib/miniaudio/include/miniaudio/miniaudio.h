@@ -72013,7 +72013,10 @@ static ma_bool32 ma_node_output_bus_has_read(ma_node_output_bus* pOutputBus)
 
 static void ma_node_output_bus_set_is_attached(ma_node_output_bus* pOutputBus, ma_bool32 isAttached)
 {
-    ma_atomic_exchange_32(&pOutputBus->isAttached, isAttached);
+    if (pOutputBus == NULL) {
+        return;  // Prevent null pointer dereference
+    }
+    ma_atomic_exchange_32(&pOutputBus->isAttached, (ma_uint32)isAttached);
 }
 
 static ma_bool32 ma_node_output_bus_is_attached(ma_node_output_bus* pOutputBus)
