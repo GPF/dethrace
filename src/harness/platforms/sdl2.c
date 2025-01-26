@@ -195,7 +195,7 @@ static int get_mouse_position(int* pX, int* pY) {
     return 0;
 }
 
-static void limit_fps(void) {
+/*static void limit_fps(void) {
     Uint32 now = SDL_GetTicks();
     if (last_frame_time != 0) {
         unsigned int frame_time = now - last_frame_time;
@@ -208,7 +208,7 @@ static void limit_fps(void) {
         }
     }
     last_frame_time = SDL_GetTicks();
-}
+}*/
 
 static void present_screen(br_pixelmap* src) {
     // fastest way to convert 8 bit indexed to 32 bit
@@ -224,15 +224,16 @@ static void present_screen(br_pixelmap* src) {
     }
     SDL_UnlockTexture(screen_texture);
     SDL_RenderClear(renderer);
+    //SDL_RenderCopyEx(renderer, screen_texture, NULL, NULL, 0, NULL, SDL_FLIP_VERTICAL | SDL_FLIP_HORIZONTAL);
     SDL_RenderCopy(renderer, screen_texture, NULL, NULL);
     //SDL_RenderCopyEx(renderer, screen_texture, NULL, NULL, 0, NULL, SDL_FLIP_VERTICAL | SDL_FLIP_HORIZONTAL);
     SDL_RenderPresent(renderer);
 
     last_screen_src = src;
 
-    if (harness_game_config.fps != 0) {
-        limit_fps();
-    }
+    /*if (harness_game_config.fps != 0) {
+        //limit_fps();
+    }*/
 }
 
 static void set_palette(PALETTEENTRY_* pal) {
