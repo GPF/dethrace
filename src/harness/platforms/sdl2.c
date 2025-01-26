@@ -223,7 +223,7 @@ static void present_screen(br_pixelmap* src) {
     }
     SDL_UnlockTexture(screen_texture);
     SDL_RenderClear(renderer);
-    SDL_RenderCopy(renderer, screen_texture, NULL, NULL);
+    SDL_RenderCopyEx(renderer, screen_texture, NULL, NULL, 0, NULL, SDL_FLIP_VERTICAL | SDL_FLIP_HORIZONTAL);
     SDL_RenderPresent(renderer);
 
     last_screen_src = src;

@@ -967,9 +967,8 @@ int original_main(int pArgc, char** pArgv) {
     gCar_simplification_level = 0;
     gCut_scene_override = 0;
     gReplay_override = 0;
-    gAusterity_mode = 1;
-    //gSound_override = 1;
-    gAustere_override = 0;
+    gSound_override = 0;
+    gAustere_override = 1;
 #endif
     gNetwork_profile_fname[0] = 0;
     uint32_t len = GetCurrentDirectoryA_(240, gNetwork_profile_fname);
