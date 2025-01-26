@@ -88,8 +88,8 @@ ma_result ma_engine_read_pcm_frames_dc(ma_engine* pEngine, float* pFramesOut, ma
 
     // Read audio data in chunks if necessary
     while (totalFramesRead < frameCount) {
-        ma_uint32 framesToRead = (frameCount - totalFramesRead > 0xFFFFFFFF) ? 0xFFFFFFFF : (ma_uint32)(frameCount - totalFramesRead);
-        ma_uint32 framesJustRead = 0;
+        ma_uint64 framesToRead = (frameCount - totalFramesRead > 0xFFFFFFFF) ? 0xFFFFFFFF : (ma_uint32)(frameCount - totalFramesRead);
+        ma_uint64 framesJustRead = 0; // fix - ma_uint32
 
         // Read frames from the engine, ensuring aligned output
         result = ma_engine_read_pcm_frames(pEngine, pFramesOut + totalFramesRead * channels, framesToRead, &framesJustRead);
