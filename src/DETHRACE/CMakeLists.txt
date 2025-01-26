@@ -52,6 +52,18 @@ if(DETHRACE_REPLAY_DEBUG)
     target_compile_definitions(dethrace_obj PRIVATE DETHRACE_REPLAY_DEBUG)
 endif()
 
+set(COMMON_COMPILE_FLAGS
+    -O2
+    -flto=auto
+    #-ffast-math 
+    #-mfsca 
+    #-mfsrra
+    #-fbuiltin 
+    #-ffp-contract=fast
+)
+
+target_compile_options(dethrace_obj PRIVATE ${COMMON_COMPILE_FLAGS})
+
 target_sources(dethrace_obj PRIVATE
     common/brucetrk.c
     common/brucetrk.h

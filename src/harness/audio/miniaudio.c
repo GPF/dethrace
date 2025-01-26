@@ -227,7 +227,7 @@ tAudioBackend_error_code AudioBackend_InitCDA(void) {
     }
     printf("Music found\n");
 
-    snd_stream_init();
+    //snd_stream_init();
     sndoggvorbis_init();
 
     return eAB_success;
