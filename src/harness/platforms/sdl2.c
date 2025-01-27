@@ -47,6 +47,7 @@ static void* create_window_and_renderer(char* title, int x, int y, int width, in
     if (harness_game_config.start_full_screen) {
         SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN_DESKTOP);
     }
+    
     // SDL_SetHint(SDL_HINT_RENDER_DRIVER, "software");
     // SDL_SetHint(SDL_HINT_RENDER_VSYNC, "1");
     renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED); //SDL_RENDERER_PRESENTVSYNC
@@ -223,8 +224,8 @@ static void present_screen(br_pixelmap* src) {
     }
     SDL_UnlockTexture(screen_texture);
     SDL_RenderClear(renderer);
-    //SDL_RenderCopy(renderer, screen_texture, NULL, NULL);
-    SDL_RenderCopyEx(renderer, screen_texture, NULL, NULL, 0, NULL, SDL_FLIP_VERTICAL | SDL_FLIP_HORIZONTAL);
+    SDL_RenderCopy(renderer, screen_texture, NULL, NULL);
+    //SDL_RenderCopyEx(renderer, screen_texture, NULL, NULL, 0, NULL, SDL_FLIP_VERTICAL | SDL_FLIP_HORIZONTAL);
     SDL_RenderPresent(renderer);
 
     last_screen_src = src;

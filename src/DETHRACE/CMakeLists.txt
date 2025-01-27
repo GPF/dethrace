@@ -17,6 +17,7 @@ endif()
 
 target_link_libraries(dethrace_obj PUBLIC SDL2::SDL2 smackw32 harness BRender::Full BRender::DDI s3)
 target_link_libraries(dethrace_obj PUBLIC /opt/toolchains/dc/kos-ports/lib/libtremor.a)
+target_link_libraries(dethrace_obj PUBLIC /opt/toolchains/dc/kos-ports/lib/libwav.a)
 
 if(MSVC)
     target_compile_definitions(dethrace_obj PRIVATE -D_CRT_SECURE_NO_WARNINGS)
@@ -54,7 +55,7 @@ endif()
 
 set(COMMON_COMPILE_FLAGS
     -O3
-    #-fno-lto 
+    -fno-lto 
     -fbuiltin 
     #-flto=auto
     #-ffast-math 

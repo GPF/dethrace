@@ -11,8 +11,8 @@ typedef struct {
 static GamepadMapping sdlGamepadToDirectInputKeyNum = {
     .buttonMapping = {
         [SDL_CONTROLLER_BUTTON_A] = 0x1C,  // SDL_SCANCODE_RETURN
-        [SDL_CONTROLLER_BUTTON_B] = 0x4C,  // KP_5 (Handbrake)
-        [SDL_CONTROLLER_BUTTON_X] = 0xD2,  // SDL_SCANCODE_INSERT -> Reset
+        [SDL_CONTROLLER_BUTTON_B] = 0xD2,  // SDL_SCANCODE_INSERT -> Reset
+        [SDL_CONTROLLER_BUTTON_X] = 0x39,  // SDL_SCANCODE_SPACE
         [SDL_CONTROLLER_BUTTON_Y] = 0x0E,  // SDL_SCANCODE_BACKSPACE -> Repair
         [SDL_CONTROLLER_BUTTON_START] = 0x01, // ESCAPE (Pause/Menu)
         [SDL_CONTROLLER_BUTTON_DPAD_UP] = 0x48, // UP
