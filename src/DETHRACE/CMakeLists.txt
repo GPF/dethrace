@@ -17,7 +17,7 @@ endif()
 
 target_link_libraries(dethrace_obj PUBLIC SDL2::SDL2 smackw32 harness BRender::Full BRender::DDI s3)
 target_link_libraries(dethrace_obj PUBLIC /opt/toolchains/dc/kos/addons/lib/dreamcast/libSDL2_mixer.a)
-target_link_libraries(dethrace_obj PUBLIC /opt/toolchains/dc/kos-ports/lib/libogg.a)
+
 
 
 if(MSVC)
