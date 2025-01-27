@@ -45,7 +45,7 @@ typedef struct tMiniaudio_stream {
 
 ma_engine engine;
 ma_sound cda_sound;
-int cda_sound_initialized;
+//int cda_sound_initialized;
 
 #include <kos.h>
 #include <math.h>
@@ -220,6 +220,8 @@ tAudioBackend_error_code AudioBackend_Init(void) {
 }
 
 tAudioBackend_error_code AudioBackend_InitCDA(void) {
+    printf("AudioBackend_InitCDA\n");
+
     // check if music files are present or not
     if (access("MUSIC/Track02.ogg", F_OK) == -1) {
         printf("Music not found\n");
@@ -246,19 +248,24 @@ void AudioBackend_UnInitCDA(void) {
 }
 
 tAudioBackend_error_code AudioBackend_StopCDA(void) {
-    if (!cda_sound_initialized) {
+    printf("AudioBackend_StopCDA\n");
+
+    /*if (!cda_sound_initialized) {
         return eAB_success;
-    }
-    if (sndoggvorbis_isplaying()) { //if (ma_sound_is_playing(&cda_sound)) {
+    }*/
+    if (sndoggvorbis_isplaying()) { 
+    //if (ma_sound_is_playing(&cda_sound)) {
         ma_sound_stop(&cda_sound);
         //sndoggvorbis_stop();
     }
     ma_sound_uninit(&cda_sound);
-    cda_sound_initialized = 0;
+    //cda_sound_initialized = 0;
     return eAB_success;
 }
 
 tAudioBackend_error_code AudioBackend_PlayCDA(int track) {
+    printf("AudioBackend_PlayCDA\n");
+
     char path[256];
     ma_result result;
 
@@ -270,8 +277,8 @@ tAudioBackend_error_code AudioBackend_PlayCDA(int track) {
 
     printf("Starting music track: %s\n", path);
     AudioBackend_StopCDA(); //sndoggvorbis_stop();
-    sndoggvorbis_start(path, 0); // loop me
-    cda_sound_initialized = 1;
+    sndoggvorbis_start(path, 0); // dont loop me
+    //cda_sound_initialized = 1;
 
     // ensure we are not still playing a track
     /*AudioBackend_StopCDA();
@@ -285,20 +292,25 @@ tAudioBackend_error_code AudioBackend_PlayCDA(int track) {
     if (result != MA_SUCCESS) {
         return eAB_error;
     }*/
-    return 1; // eAB_success;
+    return 0; // eAB_success;
 }
 
 int AudioBackend_CDAIsPlaying(void) {
-    if (!cda_sound_initialized) {
+    //printf("AudioBackend_CDAIsPlaying %d\n", cda_sound_initialized);
+    /*if (!cda_sound_initialized) {
         return 0;
-    }
-    return sndoggvorbis_isplaying();  //ma_sound_is_playing(&cda_sound); 
+    }*/
+    //printf("> AudioBackend_CDAIsPlaying: %d \n", sndoggvorbis_isplaying());
+    //printf("AudioBackend_CDAIsPlaying %d\n", ma_sound_is_playing(&cda_sound));
+    //return ma_sound_is_playing(&cda_sound);
+    return sndoggvorbis_isplaying();
 }
 
 tAudioBackend_error_code AudioBackend_SetCDAVolume(int volume) {
-    if (!cda_sound_initialized) {
+    printf("AudioBackend_SetCDAVolume\n");
+    /*if (!cda_sound_initialized) {
         return eAB_error;
-    }
+    }*/
     ma_sound_set_volume(&cda_sound, volume / 255.0f);
     //sndoggvorbis_volume(volume / 255.0f);
     return eAB_success;
