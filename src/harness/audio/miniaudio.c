@@ -256,7 +256,7 @@ tAudioBackend_error_code AudioBackend_StopCDA(void) {
     if (sndoggvorbis_isplaying()) { 
     //if (ma_sound_is_playing(&cda_sound)) {
         ma_sound_stop(&cda_sound);
-        //sndoggvorbis_stop();
+        sndoggvorbis_stop();
     }
     ma_sound_uninit(&cda_sound);
     //cda_sound_initialized = 0;
@@ -277,7 +277,7 @@ tAudioBackend_error_code AudioBackend_PlayCDA(int track) {
 
     printf("Starting music track: %s\n", path);
     AudioBackend_StopCDA(); 
-    sndoggvorbis_stop(); // double tap ... u know
+    //sndoggvorbis_stop(); // double tap ... u know
     sndoggvorbis_start(path, 0); // dont loop me
     //cda_sound_initialized = 1;
 
