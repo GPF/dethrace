@@ -54,11 +54,12 @@ endif()
 
 set(COMMON_COMPILE_FLAGS
     -O3
+    #-fno-lto 
+    -fbuiltin 
     #-flto=auto
     #-ffast-math 
     #-mfsca 
     #-mfsrra
-    #-fbuiltin 
     #-ffp-contract=fast
 )
 target_compile_options(dethrace_obj PRIVATE ${COMMON_COMPILE_FLAGS})

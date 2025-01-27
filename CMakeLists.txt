@@ -60,8 +60,8 @@ endfunction()
 if(DEFINED __DREAMCAST__)
     set(PLATFORM_DREAMCAST TRUE)
     add_compile_options(
-    #-fno-lto 
-    #-fbuiltin
+    -fno-lto 
+    -fbuiltin
     )
 endif()
 
