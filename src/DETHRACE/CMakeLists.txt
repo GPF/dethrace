@@ -61,7 +61,6 @@ set(COMMON_COMPILE_FLAGS
     #-fbuiltin 
     #-ffp-contract=fast
 )
-
 target_compile_options(dethrace_obj PRIVATE ${COMMON_COMPILE_FLAGS})
 
 target_sources(dethrace_obj PRIVATE

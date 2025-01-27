@@ -88,7 +88,7 @@ ma_result ma_engine_read_pcm_frames_dc(ma_engine* pEngine, float* pFramesOut, ma
 
     // Read audio data in chunks if necessary
     while (totalFramesRead < frameCount) {
-        ma_uint64 framesToRead = (frameCount - totalFramesRead > 0xFFFFFFFF) ? 0xFFFFFFFF : (ma_uint32)(frameCount - totalFramesRead);
+        ma_uint32 framesToRead = (frameCount - totalFramesRead > 0xFFFFFFFF) ? 0xFFFFFFFF : (ma_uint32)(frameCount - totalFramesRead);
         ma_uint64 framesJustRead = 0; // fix - ma_uint32
 
         // Read frames from the engine, ensuring aligned output
@@ -268,9 +268,9 @@ tAudioBackend_error_code AudioBackend_PlayCDA(int track) {
         return eAB_error;
     }
 
-
-    sndoggvorbis_stop();
-    sndoggvorbis_start(path, 1); // loop me
+    printf("Starting music track: %s\n", path);
+    AudioBackend_StopCDA(); //sndoggvorbis_stop();
+    sndoggvorbis_start(path, 0); // loop me
     cda_sound_initialized = 1;
 
     // ensure we are not still playing a track
@@ -292,7 +292,7 @@ int AudioBackend_CDAIsPlaying(void) {
     if (!cda_sound_initialized) {
         return 0;
     }
-    return ma_sound_is_playing(&cda_sound); //sndoggvorbis_isplaying(); 
+    return sndoggvorbis_isplaying();  //ma_sound_is_playing(&cda_sound); 
 }
 
 tAudioBackend_error_code AudioBackend_SetCDAVolume(int volume) {
