@@ -50,8 +50,7 @@ ma_sound cda_sound;
 #include <kos.h>
 #include <math.h>
 #include <dc/sound/stream.h>
-//#include <oggvorbis/sndoggvorbis.h>
-#include <wav/sndwav.h>
+#include <oggvorbis/sndoggvorbis.h>
 #include <SDL2/SDL.h>
 
 #define NUM_SAMPLES (2048) // 2048
@@ -220,11 +219,6 @@ tAudioBackend_error_code AudioBackend_Init(void) {
     return eAB_success;
 }
 
-// https://github.com/KallistiOS/liboggvorbisplay/blob/5cea4ada7069a372423734cbc9a94ae689c7601e/include/oggvorbis/sndoggvorbis.h#L19
-// https://github.com/Dreamcast-Projects/libwav/blob/master/sndwav.h
-
- wav_stream_hnd_t cda_hnd;
-
 tAudioBackend_error_code AudioBackend_InitCDA(void) {
     printf("AudioBackend_InitCDA\n");
 
@@ -236,7 +230,7 @@ tAudioBackend_error_code AudioBackend_InitCDA(void) {
     printf("Music found\n");
 
     //snd_stream_init();
-    wav_init(); //sndoggvorbis_init();
+    sndoggvorbis_init();
 
     return eAB_success;
 }
@@ -245,9 +239,11 @@ void AudioBackend_UnInit(void) {
     ma_engine_uninit(&engine);
 }
 
+// https://github.com/KallistiOS/liboggvorbisplay/blob/5cea4ada7069a372423734cbc9a94ae689c7601e/include/oggvorbis/sndoggvorbis.h#L19
+
 void AudioBackend_UnInitCDA(void) {
-    wav_stop(cda_hnd); //sndoggvorbis_stop();
-    wav_shutdown(); //sndoggvorbis_shutdown();
+    sndoggvorbis_stop();
+    sndoggvorbis_shutdown();
     snd_stream_shutdown();
 }
 
@@ -257,12 +253,10 @@ tAudioBackend_error_code AudioBackend_StopCDA(void) {
     /*if (!cda_sound_initialized) {
         return eAB_success;
     }*/
-    if (wav_is_playing(cda_hnd)) {     //if (sndoggvorbis_isplaying()) { 
+    if (sndoggvorbis_isplaying()) { 
     //if (ma_sound_is_playing(&cda_sound)) {
         ma_sound_stop(&cda_sound);
-        printf("STOP!");
-        wav_stop(cda_hnd); //sndoggvorbis_stop();
-        wav_destroy(cda_hnd); 
+        sndoggvorbis_stop();
     }
     ma_sound_uninit(&cda_sound);
     //cda_sound_initialized = 0;
@@ -275,8 +269,7 @@ tAudioBackend_error_code AudioBackend_PlayCDA(int track) {
     char path[256];
     ma_result result;
 
-    //sprintf(path, "MUSIC/Track0%d.ogg", track);
-    sprintf(path, "MUSIC/Track0%d.wav", track);
+    sprintf(path, "MUSIC/Track0%d.ogg", track);
 
     if (access(path, F_OK) == -1) {
         return eAB_error;
@@ -285,14 +278,7 @@ tAudioBackend_error_code AudioBackend_PlayCDA(int track) {
     printf("Starting music track: %s\n", path);
     AudioBackend_StopCDA(); 
     //sndoggvorbis_stop(); // double tap ... u know
-
-    if(cda_hnd != NULL){
-        wav_stop(cda_hnd); 
-        wav_destroy(cda_hnd); 
-    }
-
-    cda_hnd = wav_create(path, 0);
-    wav_play(cda_hnd); //sndoggvorbis_start(path, 0); // dont loop me
+    sndoggvorbis_start(path, 0); // dont loop me
     //cda_sound_initialized = 1;
 
     // ensure we are not still playing a track
@@ -318,7 +304,7 @@ int AudioBackend_CDAIsPlaying(void) {
     //printf("> AudioBackend_CDAIsPlaying: %d \n", sndoggvorbis_isplaying());
     //printf("AudioBackend_CDAIsPlaying %d\n", ma_sound_is_playing(&cda_sound));
     //return ma_sound_is_playing(&cda_sound);
-    return wav_is_playing(cda_hnd); //sndoggvorbis_isplaying();
+    return sndoggvorbis_isplaying();
 }
 
 tAudioBackend_error_code AudioBackend_SetCDAVolume(int volume) {
@@ -355,8 +341,7 @@ tAudioBackend_error_code AudioBackend_PlaySample(void* type_struct_sample, int c
         return eAB_error;
     }
 
-    //flags = MA_SOUND_FLAG_DECODE | MA_SOUND_FLAG_NO_SPATIALIZATION;
-    flags = MA_SOUND_FLAG_STREAM | MA_SOUND_FLAG_NO_SPATIALIZATION;
+    flags = MA_SOUND_FLAG_DECODE | MA_SOUND_FLAG_NO_SPATIALIZATION;
     result = ma_sound_init_from_data_source(&engine, &miniaudio->buffer_ref, flags, NULL, &miniaudio->sound);
     if (result != MA_SUCCESS) {
         return eAB_error;

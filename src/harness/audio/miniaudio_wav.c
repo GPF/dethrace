@@ -355,8 +355,7 @@ tAudioBackend_error_code AudioBackend_PlaySample(void* type_struct_sample, int c
         return eAB_error;
     }
 
-    //flags = MA_SOUND_FLAG_DECODE | MA_SOUND_FLAG_NO_SPATIALIZATION;
-    flags = MA_SOUND_FLAG_STREAM | MA_SOUND_FLAG_NO_SPATIALIZATION;
+    flags = MA_SOUND_FLAG_DECODE | MA_SOUND_FLAG_NO_SPATIALIZATION;
     result = ma_sound_init_from_data_source(&engine, &miniaudio->buffer_ref, flags, NULL, &miniaudio->sound);
     if (result != MA_SUCCESS) {
         return eAB_error;

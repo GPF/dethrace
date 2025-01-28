@@ -51,7 +51,9 @@ ma_sound cda_sound;
 #include <math.h>
 #include <dc/sound/stream.h>
 //#include <oggvorbis/sndoggvorbis.h>
-#include <wav/sndwav.h>
+//#include <wav/sndwav.h>
+#include <adx/adx.h> /* ADX Decoder Library */
+#include <adx/snddrv.h> /* Direct Access to Sound Driver */
 #include <SDL2/SDL.h>
 
 #define NUM_SAMPLES (2048) // 2048
@@ -222,8 +224,7 @@ tAudioBackend_error_code AudioBackend_Init(void) {
 
 // https://github.com/KallistiOS/liboggvorbisplay/blob/5cea4ada7069a372423734cbc9a94ae689c7601e/include/oggvorbis/sndoggvorbis.h#L19
 // https://github.com/Dreamcast-Projects/libwav/blob/master/sndwav.h
-
- wav_stream_hnd_t cda_hnd;
+// https://github.com/sega-dreamcast/libadx/blob/main/include/adx.h
 
 tAudioBackend_error_code AudioBackend_InitCDA(void) {
     printf("AudioBackend_InitCDA\n");
@@ -235,9 +236,6 @@ tAudioBackend_error_code AudioBackend_InitCDA(void) {
     }
     printf("Music found\n");
 
-    //snd_stream_init();
-    wav_init(); //sndoggvorbis_init();
-
     return eAB_success;
 }
 
@@ -246,24 +244,20 @@ void AudioBackend_UnInit(void) {
 }
 
 void AudioBackend_UnInitCDA(void) {
-    wav_stop(cda_hnd); //sndoggvorbis_stop();
-    wav_shutdown(); //sndoggvorbis_shutdown();
+    adx_stop();
     snd_stream_shutdown();
 }
 
 tAudioBackend_error_code AudioBackend_StopCDA(void) {
     printf("AudioBackend_StopCDA\n");
 
-    /*if (!cda_sound_initialized) {
-        return eAB_success;
-    }*/
-    if (wav_is_playing(cda_hnd)) {     //if (sndoggvorbis_isplaying()) { 
-    //if (ma_sound_is_playing(&cda_sound)) {
+    printf("snddrv.drv_status %d\n", snddrv.drv_status);
+    if (snddrv.drv_status == SNDDRV_STATUS_STREAMING) { 
         ma_sound_stop(&cda_sound);
-        printf("STOP!");
-        wav_stop(cda_hnd); //sndoggvorbis_stop();
-        wav_destroy(cda_hnd); 
+        printf("STOP!\n");
+        adx_stop(); //sndoggvorbis_stop();
     }
+
     ma_sound_uninit(&cda_sound);
     //cda_sound_initialized = 0;
     return eAB_success;
@@ -275,50 +269,31 @@ tAudioBackend_error_code AudioBackend_PlayCDA(int track) {
     char path[256];
     ma_result result;
 
-    //sprintf(path, "MUSIC/Track0%d.ogg", track);
-    sprintf(path, "MUSIC/Track0%d.wav", track);
+    sprintf(path, "MUSIC/Track0%d.adx", track);
 
     if (access(path, F_OK) == -1) {
         return eAB_error;
     }
 
-    printf("Starting music track: %s\n", path);
     AudioBackend_StopCDA(); 
-    //sndoggvorbis_stop(); // double tap ... u know
+    printf("Starting music track: %s\n", path);
 
-    if(cda_hnd != NULL){
-        wav_stop(cda_hnd); 
-        wav_destroy(cda_hnd); 
-    }
+    if(snddrv.drv_status == SNDDRV_STATUS_STREAMING)
 
-    cda_hnd = wav_create(path, 0);
-    wav_play(cda_hnd); //sndoggvorbis_start(path, 0); // dont loop me
-    //cda_sound_initialized = 1;
-
-    // ensure we are not still playing a track
-    /*AudioBackend_StopCDA();
-
-    result = ma_sound_init_from_file(&engine, path, 0, NULL, NULL, &cda_sound);
-    if (result != MA_SUCCESS) {
-        return eAB_error;
-    }
-    cda_sound_initialized = 1;
-    result = ma_sound_start(&cda_sound);
-    if (result != MA_SUCCESS) {
-        return eAB_error;
-    }*/
+    adx_dec(path, 0);// dont loop me    
     return 0; // eAB_success;
 }
 
 int AudioBackend_CDAIsPlaying(void) {
-    //printf("AudioBackend_CDAIsPlaying %d\n", cda_sound_initialized);
-    /*if (!cda_sound_initialized) {
-        return 0;
-    }*/
-    //printf("> AudioBackend_CDAIsPlaying: %d \n", sndoggvorbis_isplaying());
     //printf("AudioBackend_CDAIsPlaying %d\n", ma_sound_is_playing(&cda_sound));
-    //return ma_sound_is_playing(&cda_sound);
-    return wav_is_playing(cda_hnd); //sndoggvorbis_isplaying();
+
+    int ret = 0;
+    if(snddrv.drv_status == SNDDRV_STATUS_STREAMING)
+        ret = 1;
+    else 
+        ret = 0;
+
+    return ret;
 }
 
 tAudioBackend_error_code AudioBackend_SetCDAVolume(int volume) {
@@ -355,8 +330,7 @@ tAudioBackend_error_code AudioBackend_PlaySample(void* type_struct_sample, int c
         return eAB_error;
     }
 
-    //flags = MA_SOUND_FLAG_DECODE | MA_SOUND_FLAG_NO_SPATIALIZATION;
-    flags = MA_SOUND_FLAG_STREAM | MA_SOUND_FLAG_NO_SPATIALIZATION;
+    flags = MA_SOUND_FLAG_DECODE | MA_SOUND_FLAG_NO_SPATIALIZATION;
     result = ma_sound_init_from_data_source(&engine, &miniaudio->buffer_ref, flags, NULL, &miniaudio->sound);
     if (result != MA_SUCCESS) {
         return eAB_error;

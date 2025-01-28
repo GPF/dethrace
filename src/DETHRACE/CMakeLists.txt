@@ -17,6 +17,7 @@ endif()
 
 target_link_libraries(dethrace_obj PUBLIC SDL2::SDL2 smackw32 harness BRender::Full BRender::DDI s3)
 target_link_libraries(dethrace_obj PUBLIC /opt/toolchains/dc/kos-ports/lib/libtremor.a)
+target_link_libraries(dethrace_obj PUBLIC /opt/toolchains/dc/kos-ports/lib/libADX.a)
 target_link_libraries(dethrace_obj PUBLIC /opt/toolchains/dc/kos-ports/lib/libwav.a)
 
 if(MSVC)
@@ -36,6 +37,7 @@ else()
         -Wno-unused-result
         -Wno-absolute-value
         -Wstrict-prototypes
+        -Wimplicit-function-declaration
         -Wint-conversion
     )
 endif()
