@@ -23,9 +23,9 @@ static void* create_window_and_renderer(char* title, int x, int y, int width, in
     //SDL_setenv("SDL_AUDIODRIVER", "dummy", 1);
     render_width = width;
     render_height = height;
-            // SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_TEXTURED_VIDEO");
-        // SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_DIRECT_VIDEO"); 
-    // SDL_SetHint(SDL_HINT_VIDEO_DOUBLE_BUFFER, "1");
+    //SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_TEXTURED_VIDEO");
+    //SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_DIRECT_VIDEO"); 
+    SDL_SetHint(SDL_HINT_VIDEO_DOUBLE_BUFFER, "0");
     if (SDL_Init(SDL_INIT_VIDEO| SDL_INIT_AUDIO | SDL_INIT_JOYSTICK| SDL_INIT_GAMECONTROLLER) != 0) {
         LOG_PANIC("SDL_INIT_VIDEO error: %s", SDL_GetError());
     }
@@ -47,19 +47,20 @@ static void* create_window_and_renderer(char* title, int x, int y, int width, in
     if (harness_game_config.start_full_screen) {
         SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN_DESKTOP);
     }
+    
     // SDL_SetHint(SDL_HINT_RENDER_DRIVER, "software");
     // SDL_SetHint(SDL_HINT_RENDER_VSYNC, "1");
-    renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_PRESENTVSYNC);
+    renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED); //SDL_RENDERER_PRESENTVSYNC
     if (renderer == NULL) {
         LOG_PANIC("Failed to create renderer: %s", SDL_GetError());
     }
-                printf("HERE\n");
+    //printf("HERE\n");
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
-        printf("HERE2\n");
+    //printf("HERE2\n");
     SDL_RenderSetLogicalSize(renderer, render_width, render_height);
-         printf("HERE3: width %d. height %d\n ", width, height);
-    screen_texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, width, height);
-        printf("HERE4\n");
+    printf("Video res: width %d. height %d\n ", width, height);
+    screen_texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, width, height); // 320x200
+    //printf("HERE4\n");
     if (screen_texture == NULL) {
         SDL_RendererInfo info;
         SDL_GetRendererInfo(renderer, &info);
@@ -223,7 +224,8 @@ static void present_screen(br_pixelmap* src) {
     }
     SDL_UnlockTexture(screen_texture);
     SDL_RenderClear(renderer);
-    SDL_RenderCopyEx(renderer, screen_texture, NULL, NULL, 0, NULL, SDL_FLIP_VERTICAL | SDL_FLIP_HORIZONTAL);
+    SDL_RenderCopy(renderer, screen_texture, NULL, NULL, 0, NULL, NULL);
+    //SDL_RenderCopyEx(renderer, screen_texture, NULL, NULL, 0, NULL, SDL_FLIP_VERTICAL | SDL_FLIP_HORIZONTAL);
     SDL_RenderPresent(renderer);
 
     last_screen_src = src;

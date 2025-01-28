@@ -51,7 +51,7 @@ ma_sound cda_sound;
 #include <math.h>
 #include <dc/sound/stream.h>
 //#include <oggvorbis/sndoggvorbis.h>
-#include <wav/sndwav.h>
+//#include <wav/sndwav.h>
 #include <SDL2/SDL.h>
 
 #define NUM_SAMPLES (2048) // 2048
@@ -90,7 +90,7 @@ ma_result ma_engine_read_pcm_frames_dc(ma_engine* pEngine, float* pFramesOut, ma
     // Read audio data in chunks if necessary
     while (totalFramesRead < frameCount) {
         ma_uint32 framesToRead = (frameCount - totalFramesRead > 0xFFFFFFFF) ? 0xFFFFFFFF : (ma_uint32)(frameCount - totalFramesRead);
-        ma_uint64 framesJustRead = 0;
+        ma_uint64 framesJustRead = 0; // fix - ma_uint32
 
         // Read frames from the engine, ensuring aligned output
         result = ma_engine_read_pcm_frames(pEngine, pFramesOut + totalFramesRead * channels, framesToRead, &framesJustRead);
@@ -222,8 +222,11 @@ tAudioBackend_error_code AudioBackend_Init(void) {
 
 // https://github.com/KallistiOS/liboggvorbisplay/blob/5cea4ada7069a372423734cbc9a94ae689c7601e/include/oggvorbis/sndoggvorbis.h#L19
 // https://github.com/Dreamcast-Projects/libwav/blob/master/sndwav.h
-
- wav_stream_hnd_t cda_hnd;
+// https://github.com/KallistiOS/KallistiOS/blob/f329407dd8045ae8f7a44c3b85eba0721c9a1199/kernel/arch/dreamcast/include/dc/cdrom.h#L471
+ 
+ //wav_stream_hnd_t cda_hnd;
+    int status = 0;      // Variable to store CD-ROM status
+    int disc_type = 0;   // Variable to store disc type
 
 tAudioBackend_error_code AudioBackend_InitCDA(void) {
     printf("AudioBackend_InitCDA\n");
@@ -236,7 +239,7 @@ tAudioBackend_error_code AudioBackend_InitCDA(void) {
     printf("Music found\n");
 
     //snd_stream_init();
-    wav_init(); //sndoggvorbis_init();
+    //wav_init(); //sndoggvorbis_init();
 
     return eAB_success;
 }
@@ -246,8 +249,8 @@ void AudioBackend_UnInit(void) {
 }
 
 void AudioBackend_UnInitCDA(void) {
-    wav_stop(cda_hnd); //sndoggvorbis_stop();
-    wav_shutdown(); //sndoggvorbis_shutdown();
+    cdrom_cdda_pause(); //wav_stop(cda_hnd); //sndoggvorbis_stop();
+    //wav_shutdown(); //sndoggvorbis_shutdown();
     snd_stream_shutdown();
 }
 
@@ -257,12 +260,11 @@ tAudioBackend_error_code AudioBackend_StopCDA(void) {
     /*if (!cda_sound_initialized) {
         return eAB_success;
     }*/
-    if (wav_is_playing(cda_hnd)) {     //if (sndoggvorbis_isplaying()) { 
+    if (cdrom_get_status(&status, &disc_type) == CD_SUB_AUDIO_STATUS_PLAYING) {     //if (sndoggvorbis_isplaying()) { 
     //if (ma_sound_is_playing(&cda_sound)) {
         ma_sound_stop(&cda_sound);
         printf("STOP!");
-        wav_stop(cda_hnd); //sndoggvorbis_stop();
-        wav_destroy(cda_hnd); 
+        cdrom_cdda_pause();
     }
     ma_sound_uninit(&cda_sound);
     //cda_sound_initialized = 0;
@@ -286,13 +288,17 @@ tAudioBackend_error_code AudioBackend_PlayCDA(int track) {
     AudioBackend_StopCDA(); 
     //sndoggvorbis_stop(); // double tap ... u know
 
-    if(cda_hnd != NULL){
-        wav_stop(cda_hnd); 
-        wav_destroy(cda_hnd); 
+    cdrom_cdda_pause();   
+
+    int number;
+    // Extract the number using sscanf
+    if (sscanf(path, "MUSIC/Track0%d.wav", &number) == 1) {
+        printf("Extracted track number: %d\n", number);
+    } else {
+        printf("Failed to extract the track number.\n");
     }
 
-    cda_hnd = wav_create(path, 0);
-    wav_play(cda_hnd); //sndoggvorbis_start(path, 0); // dont loop me
+    cdrom_cdda_play(number+1, number+1, 0, CDDA_TRACKS); //sndoggvorbis_start(path, 0); // dont loop me
     //cda_sound_initialized = 1;
 
     // ensure we are not still playing a track
@@ -318,7 +324,8 @@ int AudioBackend_CDAIsPlaying(void) {
     //printf("> AudioBackend_CDAIsPlaying: %d \n", sndoggvorbis_isplaying());
     //printf("AudioBackend_CDAIsPlaying %d\n", ma_sound_is_playing(&cda_sound));
     //return ma_sound_is_playing(&cda_sound);
-    return wav_is_playing(cda_hnd); //sndoggvorbis_isplaying();
+    printf("> AudioBackend_CDAIsPlaying: %d \n", status);
+    return cdrom_get_status(&status, &disc_type) == CD_SUB_AUDIO_STATUS_PLAYING; //wav_is_playing(cda_hnd); //sndoggvorbis_isplaying();
 }
 
 tAudioBackend_error_code AudioBackend_SetCDAVolume(int volume) {

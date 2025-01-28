@@ -17,6 +17,7 @@ endif()
 
 target_link_libraries(dethrace_obj PUBLIC SDL2::SDL2 smackw32 harness BRender::Full BRender::DDI s3)
 target_link_libraries(dethrace_obj PUBLIC /opt/toolchains/dc/kos-ports/lib/libtremor.a)
+target_link_libraries(dethrace_obj PUBLIC /opt/toolchains/dc/kos-ports/lib/libwav.a)
 
 if(MSVC)
     target_compile_definitions(dethrace_obj PRIVATE -D_CRT_SECURE_NO_WARNINGS)
@@ -35,6 +36,7 @@ else()
         -Wno-unused-result
         -Wno-absolute-value
         -Wstrict-prototypes
+        -Wint-conversion
     )
 endif()
 target_compile_definitions(dethrace_obj PRIVATE INSIDE_DETHRACE)
@@ -51,6 +53,18 @@ endif()
 if(DETHRACE_REPLAY_DEBUG)
     target_compile_definitions(dethrace_obj PRIVATE DETHRACE_REPLAY_DEBUG)
 endif()
+
+set(COMMON_COMPILE_FLAGS
+    -O3
+    -fno-lto 
+    -fbuiltin 
+    #-flto=auto
+    #-ffast-math 
+    #-mfsca 
+    #-mfsrra
+    #-ffp-contract=fast
+)
+target_compile_options(dethrace_obj PRIVATE ${COMMON_COMPILE_FLAGS})
 
 target_sources(dethrace_obj PRIVATE
     common/brucetrk.c

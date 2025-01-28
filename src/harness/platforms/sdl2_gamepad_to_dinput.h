@@ -10,24 +10,24 @@ typedef struct {
 // Define the mappings
 static GamepadMapping sdlGamepadToDirectInputKeyNum = {
     .buttonMapping = {
-        [SDL_CONTROLLER_BUTTON_A] = 0x48,  // KP_8 (Accelerate - fallback)
-        [SDL_CONTROLLER_BUTTON_B] = 0x4C,  // KP_5 (Handbrake)
-        [SDL_CONTROLLER_BUTTON_X] = 0x01,  // SPACEBAR (Action)
-        [SDL_CONTROLLER_BUTTON_Y] = 0x1C,  // 'C' (Cockpit Toggle)
-        [SDL_CONTROLLER_BUTTON_START] = 0x39, // ESCAPE (Pause/Menu)
+        [SDL_CONTROLLER_BUTTON_A] = 0x1C,  // SDL_SCANCODE_RETURN
+        [SDL_CONTROLLER_BUTTON_B] = 0xD2,  // SDL_SCANCODE_INSERT -> Reset
+        [SDL_CONTROLLER_BUTTON_X] = 0x39,  // SDL_SCANCODE_SPACE
+        [SDL_CONTROLLER_BUTTON_Y] = 0x0E,  // SDL_SCANCODE_BACKSPACE -> Repair
+        [SDL_CONTROLLER_BUTTON_START] = 0x01, // ESCAPE (Pause/Menu)
         [SDL_CONTROLLER_BUTTON_DPAD_UP] = 0x48, // UP
-        [SDL_CONTROLLER_BUTTON_DPAD_DOWN] = 0xD0, // DOWN
+        [SDL_CONTROLLER_BUTTON_DPAD_DOWN] = 0x50, // DOWN
         [SDL_CONTROLLER_BUTTON_DPAD_LEFT] = 0x4B, // LEFT
         [SDL_CONTROLLER_BUTTON_DPAD_RIGHT] = 0x4D  // RIGHT
     },
     .axisPositive = {
-        [SDL_CONTROLLER_AXIS_TRIGGERRIGHT] = 0x48,  // KP_8 (Accelerate)
-        [SDL_CONTROLLER_AXIS_TRIGGERLEFT]  = 0x4C,  // KP_2 (Brake)
-        [SDL_CONTROLLER_AXIS_LEFTX] = 0x12, // 'E' (Look Right)
-        [SDL_CONTROLLER_AXIS_LEFTY] = 0x2E  // 'C' (Cockpit Toggle)
+        [SDL_CONTROLLER_AXIS_TRIGGERRIGHT] = 0x48,  // SDL_SCANCODE_UP
+        [SDL_CONTROLLER_AXIS_TRIGGERLEFT]  = 0x50,  // SDL_SCANCODE_DOWN
+        [SDL_CONTROLLER_AXIS_LEFTX] = 0x4B, // SDL_SCANCODE_LEFT
+        [SDL_CONTROLLER_AXIS_LEFTY] = 0x2E  // SDL_SCANCODE_C
     },
     .axisNegative = {
-        [SDL_CONTROLLER_AXIS_LEFTX] = 0x10, // 'Q' (Look Left)
-        [SDL_CONTROLLER_AXIS_LEFTY] = 0x11  // 'W' (Look Forward)
+        [SDL_CONTROLLER_AXIS_LEFTX] = 0x0F, // SDL_SCANCODE_TAB
+        [SDL_CONTROLLER_AXIS_LEFTY] = 0x48  // SDL_SCANCODE_UP
     }
 };

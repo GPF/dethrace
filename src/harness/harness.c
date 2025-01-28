@@ -165,7 +165,7 @@ void Harness_Init(int* argc, char* argv[]) {
     // disable the original CD check code
     harness_game_config.enable_cd_check = 0;
     // original physics time step. Lower values seem to work better at 30+ fps
-    harness_game_config.physics_step_time = 40;
+    harness_game_config.physics_step_time = 40; // 40
     // do not limit fps by default
     harness_game_config.fps = 0;
     // do not freeze timer
