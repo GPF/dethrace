@@ -36,6 +36,7 @@ else()
         -Wno-unused-result
         -Wno-absolute-value
         -Wstrict-prototypes
+        -Wint-conversion
     )
 endif()
 target_compile_definitions(dethrace_obj PRIVATE INSIDE_DETHRACE)

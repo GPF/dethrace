@@ -62,6 +62,7 @@ if(DEFINED __DREAMCAST__)
     add_compile_options(
     -fno-lto 
     -fbuiltin
+    -Wint-conversion
     )
 endif()
 
