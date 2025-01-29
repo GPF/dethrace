@@ -223,7 +223,7 @@ tAudioBackend_error_code AudioBackend_Init(void) {
 
 tAudioBackend_error_code AudioBackend_InitCDA(void) {
     // check if music files are present or not
-    if (access("MUSIC/Track02.ogg", F_OK) == -1) {
+    if (access("MUSIC/Track02.wav", F_OK) == -1) {
         return eAB_error;
     }
     return eAB_success;
@@ -252,8 +252,7 @@ tAudioBackend_error_code AudioBackend_PlayCDA(int track) {
     char path[256];
     ma_result result;
 
-    //sprintf(path, "MUSIC/Track0%d.ogg", track);
-    sprintf(path, "MUSIC/Track0%d.wav", track);
+    sprintf(path, "MUSIC/Track0%d.ogg", track);
 
     if (access(path, F_OK) == -1) {
         return eAB_error;

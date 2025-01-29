@@ -229,7 +229,7 @@ tAudioBackend_error_code AudioBackend_InitCDA(void) {
     printf("AudioBackend_InitCDA\n");
 
     // check if music files are present or not
-    if (access("MUSIC/Track02.ogg", F_OK) == -1) {
+    if (access("MUSIC/Track02.wav", F_OK) == -1) {
         printf("Music not found\n");
         return eAB_error;
     }
