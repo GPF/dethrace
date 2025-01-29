@@ -204,7 +204,7 @@ int GotPowerupX(tCar_spec* pCar, int pIndex, int pTell_net_players, int pDisplay
     char* s2;
     tNet_message* the_message;
     LOG_TRACE("(%p, %d, %d, %d, %d)", pCar, pIndex, pTell_net_players, pDisplay_headup, pTime_left);
-
+    char *saveptr;
     if (pIndex < 0 || pIndex >= gNumber_of_powerups) {
         return -1;
     }
@@ -232,9 +232,9 @@ int GotPowerupX(tCar_spec* pCar, int pIndex, int pTell_net_players, int pDisplay
         strcpy(s, the_powerup->message);
         s2 = s;
         if (the_powerup->got_proc == FreezeTimer) {
-            s2 = strtok(s, "/");
+            s2 = strtok_r(s, "/", &saveptr);
             if (gFreeze_timer) {
-                s2 = strtok(NULL, "/");
+                s2 = strtok_r(0, "/", &saveptr);
             }
         }
         NewTextHeadupSlot(eHeadupSlot_misc, 0, 3000, -4, s2);

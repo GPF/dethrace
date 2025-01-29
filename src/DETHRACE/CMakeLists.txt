@@ -85,8 +85,9 @@ set(OPTIMIZED_FILES
     common/car.c 
     common/controls.c 
     common/crush.c 
+    common/displays.c 
     #common/netgame.c 
-    #common/utility.c
+    common/utility.c
 )
 
 set_source_files_properties(
