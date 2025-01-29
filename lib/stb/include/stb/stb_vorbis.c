@@ -4780,7 +4780,7 @@ static int get_seek_page_info(stb_vorbis* f, ProbedPage* z) {
 // rarely used function to seek back to the preceding page while finding the
 // start of a packet
 static int go_to_page_before(stb_vorbis* f, unsigned int limit_offset) {
-    unsigned int previous_safe, end;
+    unsigned int previous_safe=0, end=0;
 
     // now we want to seek back 64K from the limit
     if (limit_offset >= 65536 && limit_offset - 65536 >= f->first_audio_page_offset)
@@ -5060,7 +5060,7 @@ int stb_vorbis_seek_start(stb_vorbis* f) {
 
 unsigned int stb_vorbis_stream_length_in_samples(stb_vorbis* f) {
     unsigned int restore_offset, previous_safe;
-    unsigned int end, last_page_loc;
+    unsigned int end=0, last_page_loc=0;
 
     if (IS_PUSH_MODE(f))
         return error(f, VORBIS_invalid_api_mixing);
