@@ -61,15 +61,15 @@ if(DEFINED __DREAMCAST__)
     set(PLATFORM_DREAMCAST TRUE)
     add_compile_options(
     -fno-lto 
-    -fbuiltin
-    -Wint-conversion
+    #-fbuiltin
+    #-Wint-conversion
     )
 endif()
 
 IF (NOT __DREAMCAST__)
-test_big_endian(IS_BIGENDIAN)
+    test_big_endian(IS_BIGENDIAN)
 else()
-set(IS_BIGENDIAN 0)
+    set(IS_BIGENDIAN 0)
 endif()
 
 find_package(SDL2 CONFIG)

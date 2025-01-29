@@ -3732,8 +3732,8 @@ extern "C" {
 //#define MA_NO_NODE_GRAPH 1
 #define MA_NO_PTHREAD_IN_HEADER 1
 //#define MA_DEBUG_OUTPUT 1
-#define MA_NO_ENCODING 1
-#define MA_NO_DECODING 1
+//#define MA_NO_ENCODING 1
+//#define MA_NO_DECODING 1
 #endif
 
 #define MA_STRINGIFY(x)     #x

@@ -7,8 +7,8 @@
 #include "harness/trace.h"
 
 // Must come before miniaudio.h
-//#define STB_VORBIS_HEADER_ONLY
-//#include "stb/stb_vorbis.c"
+#define STB_VORBIS_HEADER_ONLY
+#include "stb/stb_vorbis.c"
 
 #define MINIAUDIO_IMPLEMENTATION
 #include "miniaudio/miniaudio.h"
@@ -252,7 +252,7 @@ tAudioBackend_error_code AudioBackend_PlayCDA(int track) {
     char path[256];
     ma_result result;
 
-    sprintf(path, "MUSIC/Track0%d.wav", track);
+    sprintf(path, "MUSIC/Track0%d.ogg", track);
 
     if (access(path, F_OK) == -1) {
         return eAB_error;

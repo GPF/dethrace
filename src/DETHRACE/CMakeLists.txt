@@ -17,6 +17,7 @@ endif()
 
 target_link_libraries(dethrace_obj PUBLIC SDL2::SDL2 smackw32 harness BRender::Full BRender::DDI s3)
 target_link_libraries(dethrace_obj PUBLIC /opt/toolchains/dc/kos-ports/lib/libtremor.a)
+target_link_libraries(dethrace_obj PUBLIC /opt/toolchains/dc/kos-ports/lib/libADX.a)
 target_link_libraries(dethrace_obj PUBLIC /opt/toolchains/dc/kos-ports/lib/libwav.a)
 
 if(MSVC)
@@ -36,6 +37,7 @@ else()
         -Wno-unused-result
         -Wno-absolute-value
         -Wstrict-prototypes
+        -Wimplicit-function-declaration
         -Wint-conversion
     )
 endif()
@@ -56,15 +58,41 @@ endif()
 
 set(COMMON_COMPILE_FLAGS
     -O3
-    -fno-lto 
+
+    #-fno-math-errno
+        #-fno-signed-zeros
+    #-fno-trapping-math
+    #-fassociative-math
+    #-freciprocal-math
+        #-funsafe-math-optimizations
+        #-ffinite-math-only
+    #-fno-rounding-math
+    #-fcx-limited-range
+    #-fno-signaling-nans
+    #-fexcess-precision=fast
+
+    #-fno-lto 
     -fbuiltin 
-    #-flto=auto
-    #-ffast-math 
+    -flto=auto
+    -ffast-math 
     #-mfsca 
     #-mfsrra
-    #-ffp-contract=fast
+    -ffp-contract=fast
 )
 target_compile_options(dethrace_obj PRIVATE ${COMMON_COMPILE_FLAGS})
+
+set(OPTIMIZED_FILES 
+    common/car.c 
+    common/controls.c 
+    common/crush.c 
+    #common/netgame.c 
+    #common/utility.c
+)
+
+set_source_files_properties(
+    ${OPTIMIZED_FILES}
+    PROPERTIES COMPILE_FLAGS "-fno-builtin -fno-lto -fno-fast-math"
+)
 
 target_sources(dethrace_obj PRIVATE
     common/brucetrk.c
