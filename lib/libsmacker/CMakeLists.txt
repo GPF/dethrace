@@ -30,3 +30,6 @@ target_sources(libsmacker PRIVATE
     smk_hufftree.h
     smk_malloc.h
 )
+
+
+target_link_libraries(libsmacker PUBLIC /opt/toolchains/dc/kos-ports/lib/libfastmem.a)

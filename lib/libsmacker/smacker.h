@@ -25,6 +25,8 @@
 /* includes - needed for FILE* here */
 #include <stdio.h>
 
+#include "memf.h"
+
 /** forward-declaration for an struct */
 typedef struct smk_t* smk;
 
