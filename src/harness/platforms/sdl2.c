@@ -1,6 +1,7 @@
 #include <SDL.h>
 
 #include "harness.h"
+#include "memf.h"
 #include "harness/config.h"
 #include "harness/hooks.h"
 #include "harness/trace.h"
@@ -17,6 +18,92 @@ Uint32 last_frame_time;
 
 uint8_t directinput_key_state[SDL_NUM_SCANCODES];
 #include <kos.h>
+#include <stdatomic.h>
+#include "../vmu_profiler.h"
+#include <stdio.h>
+#include <stdint.h>
+#include <kos/init.h>
+#include <arch/arch.h>
+
+
+
+//extern size_t xform_verts;
+void update_transformed_verts(vmu_profiler_measurement_t *m)
+{
+	//m->ustorage = (size_t)xform_verts;
+}
+
+void fps_callback(vmu_profiler_measurement_t *m) {
+    pvr_stats_t stats;
+    pvr_get_stats(&stats);
+    m->fstorage = stats.frame_rate;  
+}
+
+void mem_callback(vmu_profiler_measurement_t *m) {
+    void* base = (void*)(uintptr_t)page_phys_base; // Cast required
+    void* top = (void*)(uintptr_t)_arch_mem_top;   // Cast required
+    void* current = sbrk(0);      // Current break (end of allocated heap)
+
+    uint32_t total_memory = (uintptr_t)top - (uintptr_t)base;
+    uint32_t used_memory = (uintptr_t)current - (uintptr_t)base;
+    uint32_t free_memory = total_memory - used_memory;
+
+    // Convert to megabytes
+    float total_memory_mb = total_memory / (1024.0f * 1024.0f);
+    float used_memory_mb = used_memory / (1024.0f * 1024.0f);
+    float free_memory_mb = free_memory / (1024.0f * 1024.0f);
+
+    m->fstorage = used_memory_mb;
+}
+
+#include <kos.h>
+#include <stdio.h>
+
+void cpu_usage_callback(vmu_profiler_measurement_t *m) {
+   static uint64_t last_active_time = 0;
+    static uint64_t last_real_time = 0;
+
+    // Get current active CPU time in nanoseconds
+    uint64_t current_active_time = perf_cntr_timer_ns();
+
+    // Get current real-world time in milliseconds
+    uint64_t current_real_time = timer_ms_gettime64();
+
+    if (last_real_time == 0) {
+        // Initialize the last times during the first call
+        last_active_time = current_active_time;
+        last_real_time = current_real_time;
+        return;
+    }
+
+    // Calculate elapsed times
+    uint64_t active_time_elapsed = current_active_time - last_active_time;
+    uint64_t real_time_elapsed = (current_real_time - last_real_time) * 1000000; // Convert ms to ns
+
+    // Calculate CPU usage as a percentage
+    float cpu_usage = ((float)active_time_elapsed / (float)real_time_elapsed) * 100.0f;
+
+    // Display the CPU usage
+    //printf("CPU Usage: %.2f%%\n", cpu_usage);
+
+    // Update the last times
+    last_active_time = current_active_time;
+    last_real_time = current_real_time;
+
+    // Store the result in the profiler
+    m->fstorage = cpu_usage;
+}
+
+
+void setup_measures(struct vmu_profiler *p) {
+    vmu_profiler_measurement_t *fps_msr = init_measurement("FPS", use_float, fps_callback);
+	vmu_profiler_measurement_t *cpu_msr = init_measurement("SH4", use_float, cpu_usage_callback);
+	vmu_profiler_measurement_t *mem_msr = init_measurement("MEM", use_float, mem_callback);
+    vmu_profiler_add_measure(p, fps_msr);
+    vmu_profiler_add_measure(p, cpu_msr);
+	vmu_profiler_add_measure(p, mem_msr);
+}
+
 static void* create_window_and_renderer(char* title, int x, int y, int width, int height) {
     // gdb_init();
     //dbgio_dev_select("fb");
@@ -69,7 +156,10 @@ static void* create_window_and_renderer(char* title, int x, int y, int width, in
         }
         LOG_PANIC("Failed to create screen_texture: %s", SDL_GetError());
     }
-    printf("HERE5\n");
+
+    printf("Profiler init\n");
+    vmu_profiler_start(0, setup_measures);
+
     return window;
 }
 
@@ -229,6 +319,9 @@ static void present_screen(br_pixelmap* src) {
     SDL_RenderPresent(renderer);
 
     last_screen_src = src;
+
+    // Update every frame
+	vmu_profiler_update();
 
     if (harness_game_config.fps != 0) {
         limit_fps();

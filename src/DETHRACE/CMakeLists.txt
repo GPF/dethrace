@@ -19,6 +19,7 @@ target_link_libraries(dethrace_obj PUBLIC SDL2::SDL2 smackw32 harness BRender::F
 target_link_libraries(dethrace_obj PUBLIC /opt/toolchains/dc/kos-ports/lib/libtremor.a)
 target_link_libraries(dethrace_obj PUBLIC /opt/toolchains/dc/kos-ports/lib/libADX.a)
 target_link_libraries(dethrace_obj PUBLIC /opt/toolchains/dc/kos-ports/lib/libwav.a)
+target_link_libraries(dethrace_obj PUBLIC /opt/toolchains/dc/kos-ports/lib/libfastmem.a)
 
 if(MSVC)
     target_compile_definitions(dethrace_obj PRIVATE -D_CRT_SECURE_NO_WARNINGS)

@@ -58,6 +58,7 @@ target_sources(harness PRIVATE
     win95/winsock.c
     platforms/null.c
     platforms/null.h
+    vmu_profiler.c
 
     "${CMAKE_CURRENT_BINARY_DIR}/version.h"
 )
@@ -65,6 +66,7 @@ target_sources(harness PRIVATE
 if (IO_PLATFORM STREQUAL "SDL2")
     target_sources(harness PRIVATE
         platforms/sdl2.c
+        #platforms/dc_pvr.c
         platforms/sdl2_scancode_to_dinput.h
     )
     target_link_libraries(harness PRIVATE SDL2::SDL2)

@@ -2,6 +2,7 @@
 #define _GLOBVARS_H_
 
 #include "dr_types.h"
+#include "../../harness/memf.h"
 
 extern int gTyping;
 extern int gArrow_mode;
