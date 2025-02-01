@@ -60,8 +60,11 @@ endfunction()
 if(DEFINED __DREAMCAST__)
     set(PLATFORM_DREAMCAST TRUE)
     add_compile_options(
-    -fno-lto 
-    #-fbuiltin
+    -fno-lto
+    #-flto=auto
+    -Wno-incompatible-pointer-types 
+    -fbuiltin
+    -ffast-math
     #-Wint-conversion
     )
 endif()

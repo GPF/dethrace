@@ -135,8 +135,8 @@ static void* create_window_and_renderer(char* title, int x, int y, int width, in
         SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN_DESKTOP);
     }
     
-    // SDL_SetHint(SDL_HINT_RENDER_DRIVER, "software");
-    // SDL_SetHint(SDL_HINT_RENDER_VSYNC, "1");
+    //SDL_SetHint(SDL_HINT_RENDER_DRIVER, "software");
+    SDL_SetHint(SDL_HINT_RENDER_VSYNC, "0");
     renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED); //SDL_RENDERER_PRESENTVSYNC
     if (renderer == NULL) {
         LOG_PANIC("Failed to create renderer: %s", SDL_GetError());
