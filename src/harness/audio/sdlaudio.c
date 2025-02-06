@@ -135,9 +135,7 @@ tAudioBackend_error_code AudioBackend_PlayCDA(int track) {
     }
 
     // printf("Starting music track: %s\n", path);
-    if (AudioBackend_CDAIsPlaying()) {
-        AudioBackend_StopCDA();
-    }
+    AudioBackend_StopCDA();
 
     cda_music = Mix_LoadMUS(path);
     if (!cda_music) {
