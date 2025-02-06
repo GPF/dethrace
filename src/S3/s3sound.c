@@ -67,9 +67,9 @@ int S3LoadSample(tS3_sound_id id) {
         sample->channels = hdr->num_channels;
 #endif
     } else {
-        sample->rate = 16000;
-        sample->resolution = 8;
-        sample->channels = 1;
+        sample->rate = 22050;
+        sample->resolution = 16;
+        sample->channels = 2;
         sample->dataptr = buf;
         sample->size = gS3_last_file_length;
     }

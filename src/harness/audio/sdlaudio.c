@@ -19,11 +19,18 @@ typedef struct {
     int pan;
     int frequency;
     int initialized;
+    int channel; // Track the channel for this sample
 } tAudioBackend_stream;
 
 // Global variables
 static float g_volume_multiplier = 1.0f;
 static Mix_Music* cda_music = NULL;
+
+// Global or static buffer to hold streaming audio data
+#define STREAM_BUFFER_SIZE (4096 * 4) // Example size, adjust as needed
+static Uint8 stream_buffer[STREAM_BUFFER_SIZE];
+static int stream_buffer_pos = 0;
+static int stream_buffer_size = 0;
 
 // Function prototypes
 tAudioBackend_error_code AudioBackend_Init(void);
@@ -48,16 +55,16 @@ tAudioBackend_error_code AudioBackend_StreamClose(tAudioBackend_stream* stream_h
 // Initialize the audio backend
 tAudioBackend_error_code AudioBackend_Init(void) {
     if (SDL_Init(SDL_INIT_AUDIO) < 0) {
-        printf("SDL could not initialize! SDL Error: %s\n", SDL_GetError());
+        printf("SDL init error: %s\n", SDL_GetError()); 
         return eAB_error;
     }
 
-    if (Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 2, 2048) < 0) {
-        printf("SDL_mixer could not initialize! SDL_mixer Error: %s\n", Mix_GetError());
+    if (Mix_OpenAudio(22050, AUDIO_S16SYS, 2, 4096) < 0) {
+        printf("SDL_mixer init error: %s\n", Mix_GetError());
         return eAB_error;
     }
 
-    printf("Audio backend initialized successfully.\n");
+    printf("Audio initialized at 22050 Hz, 16-bit stereo\n");
     return eAB_success;
 }
 
@@ -74,6 +81,7 @@ tAudioBackend_error_code AudioBackend_InitCDA(void) {
 
     return eAB_success;
 }
+
 
 // Uninitialize the audio backend
 void AudioBackend_UnInit(void) {
@@ -156,15 +164,48 @@ tAudioBackend_error_code AudioBackend_PlaySample(void* type_struct_sample, int c
     tAudioBackend_stream* stream = (tAudioBackend_stream*)type_struct_sample;
     assert(stream != NULL);
 
-    stream->chunk = Mix_QuickLoad_RAW((Uint8*)data, size);
-    if (!stream->chunk) {
-        printf("Failed to load sample: %s\n", Mix_GetError());
+    SDL_AudioCVT cvt;
+    int build_result = SDL_BuildAudioCVT(&cvt, AUDIO_U8, channels, rate, AUDIO_S16SYS, 2, 22050);
+    if (build_result < 0) {
+        printf("SDL_BuildAudioCVT failed: %s\n", SDL_GetError());
         return eAB_error;
     }
 
-    stream->initialized = 1;
-    Mix_PlayChannel(-1, stream->chunk, loop ? -1 : 0);
+    cvt.len = size;
+    cvt.buf = (Uint8*)malloc(cvt.len * cvt.len_mult);
+    if (!cvt.buf) {
+        printf("Memory allocation failed for audio conversion\n");
+        return eAB_error;
+    }
+    memcpy(cvt.buf, data, size);
 
+    if (SDL_ConvertAudio(&cvt) < 0) {
+        printf("SDL_ConvertAudio failed: %s\n", SDL_GetError());
+        free(cvt.buf);
+        return eAB_error;
+    }
+
+    // Resampling (example using linear interpolation, requires implementation)
+    // Implement or integrate a resampler here if SDL's conversion isn't sufficient
+
+    stream->chunk = Mix_QuickLoad_RAW(cvt.buf, cvt.len_cvt);
+    if (!stream->chunk) {
+        printf("Failed to load sample: %s\n", Mix_GetError());
+        free(cvt.buf);
+        return eAB_error;
+    }
+
+    int channel = Mix_PlayChannel(-1, stream->chunk, loop ? -1 : 0);
+    if (channel == -1) {
+        printf("Failed to play sample: %s\n", Mix_GetError());
+        free(cvt.buf);
+        Mix_FreeChunk(stream->chunk);
+        return eAB_error;
+    }
+
+    stream->channel = channel;
+    stream->initialized = 1;
+    free(cvt.buf);
     return eAB_success;
 }
 
@@ -186,11 +227,10 @@ tAudioBackend_error_code AudioBackend_SetVolume(void* type_struct_sample, int vo
         return eAB_success;
     }
 
-    Mix_VolumeChunk(stream->chunk, volume * MIX_MAX_VOLUME / 255);
+    Mix_Volume(stream->channel, (volume * MIX_MAX_VOLUME) / 255);
     return eAB_success;
 }
 
-// Set sample pan
 tAudioBackend_error_code AudioBackend_SetPan(void* type_struct_sample, int pan) {
     tAudioBackend_stream* stream = (tAudioBackend_stream*)type_struct_sample;
     assert(stream != NULL);
@@ -200,8 +240,10 @@ tAudioBackend_error_code AudioBackend_SetPan(void* type_struct_sample, int pan) 
         return eAB_success;
     }
 
-    // SDL2_mixer does not support panning directly, so you may need to implement this manually
-    // or use a different library that supports panning.
+    // Convert pan from -10000 (left) to 10000 (right) to SDL's 0-255 scale
+    Uint8 left = (pan <= 0) ? 255 : (255 * (10000 - pan)) / 10000;
+    Uint8 right = (pan >= 0) ? 255 : (255 * (10000 + pan)) / 10000;
+    Mix_SetPanning(stream->channel, left, right);
     return eAB_success;
 }
 
@@ -226,11 +268,11 @@ tAudioBackend_error_code AudioBackend_StopSample(void* type_struct_sample) {
     assert(stream != NULL);
 
     if (stream->initialized) {
-        Mix_HaltChannel(-1);
+        Mix_HaltChannel(stream->channel);
         Mix_FreeChunk(stream->chunk);
         stream->initialized = 0;
+        stream->chunk = NULL;
     }
-
     return eAB_success;
 }
 
@@ -248,7 +290,21 @@ tAudioBackend_error_code AudioBackend_StreamWrite(void* stream_handle, const uns
     tAudioBackend_stream* stream = (tAudioBackend_stream*)stream_handle;
     assert(stream != NULL);
 
-    // SDL2_mixer does not support custom streaming directly. You may need to use Mix_Music for streaming.
+    // if (size + stream_buffer_size > STREAM_BUFFER_SIZE) {
+    //     // Buffer overflow, just log it or handle it in a way that fits your application
+    //     printf("Audio buffer overflow\n");
+    //     return eAB_error;
+    // }
+
+    // // Copy new data into our buffer
+    // memcpy(&stream_buffer[stream_buffer_size], data, size);
+    // stream_buffer_size += (int)size;
+
+    // // If music isn't playing, start it
+    // if (!Mix_PlayingMusic()) {
+    //     Mix_PlayMusic(NULL, 0); // Play silent music to trigger the hook
+    // }
+
     return eAB_success;
 }
 
