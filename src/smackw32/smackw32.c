@@ -28,7 +28,7 @@ Smack* SmackOpen(const char* name, uint32_t flags, uint32_t extrabuf) {
     Smack* smack;
     double fps;
 
-    smk smk_handle = smk_open_file(name, SMK_MODE_MEMORY);
+    smk smk_handle = smk_open_file(name, SMK_MODE_DISK);
     if (smk_handle == NULL) {
         return NULL;
     }

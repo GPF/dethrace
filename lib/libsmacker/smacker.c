@@ -414,6 +414,66 @@ smk smk_open_filepointer(FILE* file, const unsigned char mode) {
         s->source.file.fp = fp.file;
     }
 
+    // Log audio track details for each track
+    int track=0;
+        if (s->audio[track].exists) {
+            printf("Audio track %d details:\n", track);
+
+            // Log track existence
+            printf("  Exists: Yes\n");
+
+            // Log enable/disable status
+            printf("  Enabled: %s\n", s->audio[track].enable ? "Yes" : "No");
+
+            // Log compression type
+            switch (s->audio[track].compress) {
+                case 0:
+                    printf("  Compression: Raw PCM\n");
+                    break;
+                case 1:
+                    printf("  Compression: Smacker DPCM\n");
+                    break;
+                case 2:
+                    printf("  Compression: Bink Audio (unsupported)\n");
+                    break;
+                default:
+                    printf("  Compression: Unknown (%d)\n", s->audio[track].compress);
+                    break;
+            }
+
+            // Log channels
+            const char* channel_mode;
+            switch (s->audio[track].channels) {
+                case 1:
+                    channel_mode = "Mono";
+                    break;
+                case 2:
+                    channel_mode = "Stereo";
+                    break;
+                default:
+                    channel_mode = "Unknown";
+                    break;
+            }
+            printf("  Channels: %d (%s)\n", s->audio[track].channels, channel_mode);
+
+            // Log bit depth
+            printf("  Bit depth: %d-bit\n", s->audio[track].bitdepth);
+
+            // Log sample rate
+            printf("  Sample rate: %lu Hz\n", s->audio[track].rate);
+
+            // Log maximum buffer size
+            printf("  Max buffer size: %ld bytes\n", s->audio[track].max_buffer);
+
+            // Log current buffer size
+            printf("  Current buffer size: %lu bytes\n", s->audio[track].buffer_size);
+
+            printf("\n");  // Add a newline for readability
+        } else {
+            printf("Audio track %d does not exist.\n", track);
+        }
+    
+
     /* fall through, return s or null */
 error:
     return s;
