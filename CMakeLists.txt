@@ -57,13 +57,13 @@ function(add_compile_flags_if_supported TARGET)
     endforeach()
 endfunction()
 
-if(DEFINED __DREAMCAST__)
-    set(PLATFORM_DREAMCAST TRUE)
-    add_compile_options(
-    -fno-lto 
-    -Wint-conversion
-    )
-endif()
+# if(DEFINED __DREAMCAST__)
+#     set(PLATFORM_DREAMCAST TRUE)
+#     add_compile_options(
+#     -fno-lto 
+#     -Wint-conversion
+#     )
+# endif()
 
 IF (NOT __DREAMCAST__)
 test_big_endian(IS_BIGENDIAN)
@@ -75,11 +75,13 @@ find_package(SDL2 CONFIG)
 if(NOT SDL2_FOUND)
     find_package(SDL2 MODULE REQUIRED)
 endif()
+find_package(SDL2_mixer REQUIRED)
+
 
 
 add_subdirectory(lib/BRender-v1.3.2)
 add_subdirectory(lib/libsmacker)
-add_subdirectory(lib/miniaudio)
+add_subdirectory(lib/sdlaudio)
 add_subdirectory(lib/stb)
 
 add_library(compile_with_werror INTERFACE)
