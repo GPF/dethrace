@@ -253,6 +253,10 @@ tAudioBackend_error_code AudioBackend_SetFrequency(void* type_struct_sample, int
     return eAB_success;
 }
 
+tAudioBackend_error_code AudioBackend_SetVolumeSeparate(void* type_struct_sample, int left_volume, int right_volume) {
+    return eAB_error;
+}
+
 // Stop a sample
 tAudioBackend_error_code AudioBackend_StopSample(void* type_struct_sample) {
     tAudioBackend_stream* stream = (tAudioBackend_stream*)type_struct_sample;
