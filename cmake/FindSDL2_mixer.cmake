@@ -108,10 +108,10 @@ Original FindSDL_mixer.cmake module:
   additional Unix paths (FreeBSD, etc).
 #]=======================================================================]
 
-message(STATUS "SDL2_INCLUDE_DIRS: ${SDL2_INCLUDE_DIRS}")
-message(STATUS "SDL2_LIBRARIES: ${SDL2_LIBRARIES}")
-message(STATUS "SDL2_MIXER_INCLUDE_DIR: /opt/toolchains/dc/kos/addons/include/SDL2")
-message(STATUS "SDL2_MIXER_LIBRARY: /opt/toolchains/dc/kos/addons/lib/dreamcast/libSDL2_mixer.a")
+# message(STATUS "SDL2_INCLUDE_DIRS: ${SDL2_INCLUDE_DIRS}")
+# message(STATUS "SDL2_LIBRARIES: ${SDL2_LIBRARIES}")
+# message(STATUS "SDL2_MIXER_INCLUDE_DIR: /opt/toolchains/dc/kos/addons/include/SDL2")
+# message(STATUS "SDL2_MIXER_LIBRARY: /opt/toolchains/dc/kos/addons/lib/dreamcast/libSDL2_mixer.a")
 # SDL2 Library required
 find_package(SDL2 CONFIG)
 if(NOT SDL2_FOUND)
