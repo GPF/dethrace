@@ -82,7 +82,7 @@ find_package(SDL2_mixer REQUIRED)
 add_subdirectory(lib/BRender-v1.3.2)
 add_subdirectory(lib/libsmacker)
 add_subdirectory(lib/sdlaudio)
-add_subdirectory(lib/stb)
+# add_subdirectory(lib/stb)
 
 add_library(compile_with_werror INTERFACE)
 

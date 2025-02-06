@@ -55,16 +55,25 @@ tAudioBackend_error_code AudioBackend_StreamClose(tAudioBackend_stream* stream_h
 // Initialize the audio backend
 tAudioBackend_error_code AudioBackend_Init(void) {
     if (SDL_Init(SDL_INIT_AUDIO) < 0) {
-        printf("SDL init error: %s\n", SDL_GetError()); 
+        printf("SDL init error: %s\n", SDL_GetError());
         return eAB_error;
     }
 
-    if (Mix_OpenAudio(22050, AUDIO_S16SYS, 2, 4096) < 0) {
+    // Initialize ADX support
+    if (Mix_Init(MIX_INIT_ADX) != MIX_INIT_ADX) {
+        printf("Could not initialize mixer with ADX support: %s\n", Mix_GetError());
+        SDL_Quit();
+        return eAB_error;  // Return your error code instead of 1
+    }
+
+    if (Mix_OpenAudio(44100, AUDIO_S16SYS, 2, 4096) < 0) {
         printf("SDL_mixer init error: %s\n", Mix_GetError());
+        Mix_Quit();  // Clean up Mix_Init
+        SDL_Quit();
         return eAB_error;
     }
 
-    printf("Audio initialized at 22050 Hz, 16-bit stereo\n");
+    printf("Audio initialized at 44100 Hz, 16-bit stereo\n");
     return eAB_success;
 }
 
@@ -73,7 +82,7 @@ tAudioBackend_error_code AudioBackend_InitCDA(void) {
     printf("AudioBackend_InitCDA\n");
 
     // Check if music files are present or not
-    if (access("MUSIC/Track02.ogg", F_OK) == -1) {
+    if (access("MUSIC/Track02.wav", F_OK) == -1) {
         printf("Music not found\n");
         return eAB_error;
     }
@@ -99,13 +108,17 @@ void AudioBackend_UnInitCDA(void) {
 
 // Stop CDA playback
 tAudioBackend_error_code AudioBackend_StopCDA(void) {
-    printf("AudioBackend_StopCDA\n");
+    // printf("AudioBackend_StopCDA\n");
+    
+
 
     if (cda_music && Mix_PlayingMusic()) {
         Mix_HaltMusic();
         Mix_FreeMusic(cda_music);
         cda_music = NULL;
     }
+
+    
 
     return eAB_success;
 }
@@ -115,14 +128,16 @@ tAudioBackend_error_code AudioBackend_PlayCDA(int track) {
     printf("AudioBackend_PlayCDA\n");
 
     char path[256];
-    sprintf(path, "MUSIC/Track0%d.ogg", track);
+    sprintf(path, "MUSIC/Track0%d.wav", track);
 
     if (access(path, F_OK) == -1) {
         return eAB_error;
     }
 
-    printf("Starting music track: %s\n", path);
-    AudioBackend_StopCDA();
+    // printf("Starting music track: %s\n", path);
+    if (AudioBackend_CDAIsPlaying()) {
+        AudioBackend_StopCDA();
+    }
 
     cda_music = Mix_LoadMUS(path);
     if (!cda_music) {
@@ -164,48 +179,23 @@ tAudioBackend_error_code AudioBackend_PlaySample(void* type_struct_sample, int c
     tAudioBackend_stream* stream = (tAudioBackend_stream*)type_struct_sample;
     assert(stream != NULL);
 
-    SDL_AudioCVT cvt;
-    int build_result = SDL_BuildAudioCVT(&cvt, AUDIO_U8, channels, rate, AUDIO_S16SYS, 2, 22050);
-    if (build_result < 0) {
-        printf("SDL_BuildAudioCVT failed: %s\n", SDL_GetError());
-        return eAB_error;
-    }
-
-    cvt.len = size;
-    cvt.buf = (Uint8*)malloc(cvt.len * cvt.len_mult);
-    if (!cvt.buf) {
-        printf("Memory allocation failed for audio conversion\n");
-        return eAB_error;
-    }
-    memcpy(cvt.buf, data, size);
-
-    if (SDL_ConvertAudio(&cvt) < 0) {
-        printf("SDL_ConvertAudio failed: %s\n", SDL_GetError());
-        free(cvt.buf);
-        return eAB_error;
-    }
-
-    // Resampling (example using linear interpolation, requires implementation)
-    // Implement or integrate a resampler here if SDL's conversion isn't sufficient
-
-    stream->chunk = Mix_QuickLoad_RAW(cvt.buf, cvt.len_cvt);
-    if (!stream->chunk) {
+    // No need for conversion if data is ADX
+    Mix_Chunk* chunk = Mix_LoadWAV_RW(SDL_RWFromMem(data, size), 1);
+    if (!chunk) {
         printf("Failed to load sample: %s\n", Mix_GetError());
-        free(cvt.buf);
         return eAB_error;
     }
 
-    int channel = Mix_PlayChannel(-1, stream->chunk, loop ? -1 : 0);
+    int channel = Mix_PlayChannel(-1, chunk, loop ? -1 : 0);
     if (channel == -1) {
         printf("Failed to play sample: %s\n", Mix_GetError());
-        free(cvt.buf);
-        Mix_FreeChunk(stream->chunk);
+        Mix_FreeChunk(chunk);
         return eAB_error;
     }
 
+    stream->chunk = chunk; // Store the chunk for later use if needed
     stream->channel = channel;
     stream->initialized = 1;
-    free(cvt.buf);
     return eAB_success;
 }
 
