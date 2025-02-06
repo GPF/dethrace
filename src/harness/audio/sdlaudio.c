@@ -177,22 +177,14 @@ tAudioBackend_error_code AudioBackend_PlaySample(void* type_struct_sample, int c
     tAudioBackend_stream* stream = (tAudioBackend_stream*)type_struct_sample;
     assert(stream != NULL);
 
-    // No need for conversion if data is ADX
+    // Load sample from memory
     Mix_Chunk* chunk = Mix_LoadWAV_RW(SDL_RWFromMem(data, size), 1);
     if (!chunk) {
         printf("Failed to load sample: %s\n", Mix_GetError());
-        free(cvt.buf);
         return eAB_error;
     }
 
-    int channel = Mix_PlayChannel(-1, stream->chunk, loop ? -1 : 0);
-    if (channel == -1) {
-        printf("Failed to play sample: %s\n", Mix_GetError());
-        free(cvt.buf);
-        Mix_FreeChunk(stream->chunk);
-        return eAB_error;
-    }
-
+    // Play sample
     int channel = Mix_PlayChannel(-1, chunk, loop ? -1 : 0);
     if (channel == -1) {
         printf("Failed to play sample: %s\n", Mix_GetError());
@@ -200,9 +192,11 @@ tAudioBackend_error_code AudioBackend_PlaySample(void* type_struct_sample, int c
         return eAB_error;
     }
 
-    stream->chunk = chunk; // Store the chunk for later use if needed
+    // Store chunk and channel in stream
+    stream->chunk = chunk;
     stream->channel = channel;
     stream->initialized = 1;
+
     return eAB_success;
 }
 
