@@ -72,7 +72,7 @@ if (Mix_Init(MIX_INIT_ADX) != MIX_INIT_ADX) {
     return eAB_error;
 }
 
-if (Mix_OpenAudio(22050, AUDIO_S16LSB, 2, 1024) < 0) {
+if (Mix_OpenAudio(22050, AUDIO_S16LSB, 2, 2048) < 0) {
     printf("SDL_mixer init error: %s\n", Mix_GetError());
     Mix_Quit();  // Clean up Mix_Init
     SDL_Quit();

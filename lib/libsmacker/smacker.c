@@ -1065,38 +1065,31 @@ static char smk_render_audio(struct smk_audio_t* s, unsigned char* p, unsigned l
             ((unsigned char*)t)[0] = (unsigned char)unpack;
         }
 
-        /* All set: let's read some DATA! */
+       /* All set: let's read some DATA! */
         while (k < s->buffer_size) {
             if (s->bitdepth == 8) {
-                /* Decode 8-bit sample */
                 smk_huff8_lookup(bs, aud_tree[0], unpack);
-
-                /* Convert 8-bit to 16-bit and store in the buffer */
-                ((short*)t)[j] = (short)(unpack | (unpack << 8)); /* Upscale to 16-bit */
-
+                // ((unsigned char*)t)[j] = (char)unpack + ((unsigned char*)t)[j - s->channels];
+                ((short*)t)[j] = ((short)unpack << 8) | (short)unpack;  // Expand 8-bit to 16-bit
+                ((short*)t)[j] += ((short*)t)[j - s->channels];  // Delta decoding                
                 j++;
                 k++;
             } else {
-                /* Handle 16-bit case (unchanged) */
                 smk_huff8_lookup(bs, aud_tree[0], unpack);
                 smk_huff8_lookup(bs, aud_tree[1], unpack2);
                 ((short*)t)[j] = (short)(unpack | (unpack2 << 8)) + ((short*)t)[j - s->channels];
                 j++;
                 k += 2;
             }
-
             if (s->channels == 2) {
                 if (s->bitdepth == 8) {
-                    /* Decode 8-bit sample for the second channel */
                     smk_huff8_lookup(bs, aud_tree[2], unpack);
-
-                    /* Convert 8-bit to 16-bit and store in the buffer */
-                    ((short*)t)[j] = ((short)unpack) << 8; /* Upscale to 16-bit */
-
+                    // ((unsigned char*)t)[j] = (char)unpack + ((unsigned char*)t)[j - 2];
+                    ((short*)t)[j] = ((short)unpack << 8) | (short)unpack;  // Expand 8-bit to 16-bit
+                    ((short*)t)[j] += ((short*)t)[j - 2];  // Delta decoding                    
                     j++;
                     k++;
                 } else {
-                    /* Handle 16-bit case for the second channel (unchanged) */
                     smk_huff8_lookup(bs, aud_tree[2], unpack);
                     smk_huff8_lookup(bs, aud_tree[3], unpack2);
                     ((short*)t)[j] = (short)(unpack | (unpack2 << 8)) + ((short*)t)[j - 2];
@@ -1105,6 +1098,7 @@ static char smk_render_audio(struct smk_audio_t* s, unsigned char* p, unsigned l
                 }
             }
         }
+
 
         /* All done with the trees, free them. */
         for (j = 0; j < 4; j++) {
