@@ -117,9 +117,9 @@ struct smk_t {
         unsigned char compress;
 
         /* pointer to last-decoded-audio-buffer */
-        void* buffer;
+        void* buffer __attribute__((aligned(32))); 
         unsigned long buffer_size;
-    } audio[7];
+    } audio[7] __attribute__((aligned(32)));;
 };
 
 union smk_read_t {
@@ -258,6 +258,7 @@ static smk smk_open_generic(const unsigned char m, union smk_read_t fp, unsigned
     /* Max buffer size for each audio track - used to pre-allocate buffers */
     for (temp_l = 0; temp_l < 7; temp_l++) {
         smk_read_ul(s->audio[temp_l].max_buffer);
+        s->audio[temp_l].max_buffer *= 2; /* double for 16-bit */
     }
 
     /* Read size of "hufftree chunk" - save for later. */
@@ -981,7 +982,7 @@ static char smk_render_audio(struct smk_audio_t* s, unsigned char* p, unsigned l
     unsigned int j, k;
     unsigned char* t = s->buffer;
     struct smk_bit_t* bs = NULL;
-
+    size *=2; // Double the size for 16-bit output
     char bit;
     short unpack, unpack2;
 
@@ -1067,24 +1068,35 @@ static char smk_render_audio(struct smk_audio_t* s, unsigned char* p, unsigned l
         /* All set: let's read some DATA! */
         while (k < s->buffer_size) {
             if (s->bitdepth == 8) {
+                /* Decode 8-bit sample */
                 smk_huff8_lookup(bs, aud_tree[0], unpack);
-                ((unsigned char*)t)[j] = (char)unpack + ((unsigned char*)t)[j - s->channels];
+
+                /* Convert 8-bit to 16-bit and store in the buffer */
+                ((short*)t)[j] = (short)(unpack | (unpack << 8)); /* Upscale to 16-bit */
+
                 j++;
                 k++;
             } else {
+                /* Handle 16-bit case (unchanged) */
                 smk_huff8_lookup(bs, aud_tree[0], unpack);
                 smk_huff8_lookup(bs, aud_tree[1], unpack2);
                 ((short*)t)[j] = (short)(unpack | (unpack2 << 8)) + ((short*)t)[j - s->channels];
                 j++;
                 k += 2;
             }
+
             if (s->channels == 2) {
                 if (s->bitdepth == 8) {
+                    /* Decode 8-bit sample for the second channel */
                     smk_huff8_lookup(bs, aud_tree[2], unpack);
-                    ((unsigned char*)t)[j] = (char)unpack + ((unsigned char*)t)[j - 2];
+
+                    /* Convert 8-bit to 16-bit and store in the buffer */
+                    ((short*)t)[j] = ((short)unpack) << 8; /* Upscale to 16-bit */
+
                     j++;
                     k++;
                 } else {
+                    /* Handle 16-bit case for the second channel (unchanged) */
                     smk_huff8_lookup(bs, aud_tree[2], unpack);
                     smk_huff8_lookup(bs, aud_tree[3], unpack2);
                     ((short*)t)[j] = (short)(unpack | (unpack2 << 8)) + ((short*)t)[j - 2];

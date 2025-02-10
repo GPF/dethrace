@@ -23,13 +23,13 @@ static void* create_window_and_renderer(char* title, int x, int y, int width, in
     //SDL_setenv("SDL_AUDIODRIVER", "dummy", 1);
     render_width = width;
     render_height = height;
-    // SDL_SetHint(SDL_HINT_VIDEO_DOUBLE_BUFFER, "0");    
-    //SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_TEXTURED_VIDEO");
+    SDL_SetHint(SDL_HINT_VIDEO_DOUBLE_BUFFER, "1");    
+    SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_TEXTURED_VIDEO");
     //SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_DIRECT_VIDEO"); 
     if (SDL_Init(SDL_INIT_VIDEO| SDL_INIT_AUDIO | SDL_INIT_JOYSTICK| SDL_INIT_GAMECONTROLLER) != 0) {
         LOG_PANIC("SDL_INIT_VIDEO error: %s", SDL_GetError());
     }
-
+    SDL_ShowCursor(SDL_DISABLE);
     // if(SDL_InitSubSystem(SDL_INIT_GAMECONTROLLER) != 0) {
     //     LOG_WARN("SDL_INIT_GAMECONTROLLER error: %s", SDL_GetError());
     // }
@@ -49,8 +49,8 @@ static void* create_window_and_renderer(char* title, int x, int y, int width, in
     }
     
     // SDL_SetHint(SDL_HINT_RENDER_DRIVER, "software");
-    // SDL_SetHint(SDL_HINT_RENDER_VSYNC, "1");
-    renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED); //SDL_RENDERER_PRESENTVSYNC
+    SDL_SetHint(SDL_HINT_RENDER_VSYNC, "1");
+    renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_PRESENTVSYNC); //SDL_RENDERER_PRESENTVSYNC
     if (renderer == NULL) {
         LOG_PANIC("Failed to create renderer: %s", SDL_GetError());
     }
@@ -238,7 +238,7 @@ static void present_screen(br_pixelmap* src) {
 
 static void set_palette(PALETTEENTRY_* pal) {
     for (int i = 0; i < 256; i++) {
-        converted_palette[i] = (0xff << 24 | pal[i].peBlue << 16 | pal[i].peGreen << 8 | pal[i].peRed);
+        converted_palette[i] = (0xff << 24 | pal[i].peRed << 16 | pal[i].peGreen << 8 | pal[i].peBlue);
     }
     if (last_screen_src != NULL) {
         present_screen(last_screen_src);
