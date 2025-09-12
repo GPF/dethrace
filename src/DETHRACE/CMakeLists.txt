@@ -18,7 +18,7 @@ endif()
 add_library(SDL2_mixer STATIC IMPORTED)
 set_target_properties(SDL2_mixer PROPERTIES
     IMPORTED_LOCATION "/opt/toolchains/dc/kos/addons/lib/dreamcast/libSDL2_mixer.a"
-    INTERFACE_INCLUDE_DIRECTORIES "/opt/toolchains/dc/kos/addons/include/SDL2"  # adjust if needed
+    INTERFACE_INCLUDE_DIRECTORIES "/opt/toolchains/dc/kos/addons/include/dreamcast/SDL2"  # adjust if needed
 )
 target_link_libraries(SDL2_mixer INTERFACE SDL2::SDL2)
 target_link_libraries(dethrace_obj PUBLIC SDL2::SDL2 smackw32 harness BRender::Full BRender::DDI s3 SDL2_mixer SDL2::SDL2 )
@@ -98,7 +98,7 @@ set(OPTIMIZED_FILES
 
 set_source_files_properties(
     ${OPTIMIZED_FILES}
-    PROPERTIES COMPILE_FLAGS "-fno-builtin -fno-lto -fno-fast-math"
+    PROPERTIES COMPILE_FLAGS "-fno-builtin -fno-fast-math"
 )
 
 target_sources(dethrace_obj PRIVATE

@@ -258,7 +258,7 @@ static smk smk_open_generic(const unsigned char m, union smk_read_t fp, unsigned
     /* Max buffer size for each audio track - used to pre-allocate buffers */
     for (temp_l = 0; temp_l < 7; temp_l++) {
         smk_read_ul(s->audio[temp_l].max_buffer);
-        s->audio[temp_l].max_buffer *= 2; /* double for 16-bit */
+        // s->audio[temp_l].max_buffer *= 4; /* double for 16-bit */
     }
 
     /* Read size of "hufftree chunk" - save for later. */
@@ -982,11 +982,10 @@ static char smk_render_audio(struct smk_audio_t* s, unsigned char* p, unsigned l
     unsigned int j, k;
     unsigned char* t = s->buffer;
     struct smk_bit_t* bs = NULL;
-    size *=2; // Double the size for 16-bit output
     char bit;
     short unpack, unpack2;
-
-    /* used for audio decoding */
+    // size*=4; // 4*size for 16-bit and stereo
+        /* used for audio decoding */
     struct smk_huff8_t* aud_tree[4] = { NULL, NULL, NULL, NULL };
 
     /* sanity check */
@@ -1031,7 +1030,7 @@ static char smk_render_audio(struct smk_audio_t* s, unsigned char* p, unsigned l
             fputs("libsmacker::smk_render - ERROR: 8-/16-bit mismatch\n", stderr);
         }
 
-        /* build the trees */
+        /* Build Huffman trees */
         smk_huff8_build(bs, aud_tree[0]);
         j = 1;
         k = 1;
@@ -1069,24 +1068,47 @@ static char smk_render_audio(struct smk_audio_t* s, unsigned char* p, unsigned l
         while (k < s->buffer_size) {
             if (s->bitdepth == 8) {
                 smk_huff8_lookup(bs, aud_tree[0], unpack);
-                // ((unsigned char*)t)[j] = (char)unpack + ((unsigned char*)t)[j - s->channels];
-                ((short*)t)[j] = ((short)unpack << 8) | (short)unpack;  // Expand 8-bit to 16-bit
-                ((short*)t)[j] += ((short*)t)[j - s->channels];  // Delta decoding                
+                ((unsigned char*)t)[j] = (char)unpack + ((unsigned char*)t)[j - s->channels];
+                // Apply delta decoding while still in 8-bit
+                // unpack += ((unsigned char*)t)[j - s->channels];
+
+                // Expand 8-bit to 16-bit
+                // ((short*)t)[j] = ((short)unpack << 8) | (short)unpack;
+
+                // If mono, duplicate sample for stereo
+                // if (s->channels == 1) {
+                //     ((short*)t)[j + 1] = ((short*)t)[j];
+                //     j++;
+                //     k++;
+                // }
+
                 j++;
                 k++;
             } else {
                 smk_huff8_lookup(bs, aud_tree[0], unpack);
                 smk_huff8_lookup(bs, aud_tree[1], unpack2);
                 ((short*)t)[j] = (short)(unpack | (unpack2 << 8)) + ((short*)t)[j - s->channels];
+
+                // If mono, duplicate sample for stereo
+                // if (s->channels == 1) {
+                //     ((short*)t)[j + 1] = ((short*)t)[j];
+                //     j++;
+                //     k += 2;
+                // }
+
                 j++;
                 k += 2;
             }
             if (s->channels == 2) {
                 if (s->bitdepth == 8) {
                     smk_huff8_lookup(bs, aud_tree[2], unpack);
-                    // ((unsigned char*)t)[j] = (char)unpack + ((unsigned char*)t)[j - 2];
-                    ((short*)t)[j] = ((short)unpack << 8) | (short)unpack;  // Expand 8-bit to 16-bit
-                    ((short*)t)[j] += ((short*)t)[j - 2];  // Delta decoding                    
+                    ((unsigned char*)t)[j] = (char)unpack + ((unsigned char*)t)[j - 2];
+                    // Apply delta decoding while still in 8-bit
+                    // unpack += ((unsigned char*)t)[j - 2];
+
+                    // // Expand 8-bit to 16-bit
+                    // ((short*)t)[j] = ((short)unpack << 8) | (short)unpack;
+
                     j++;
                     k++;
                 } else {

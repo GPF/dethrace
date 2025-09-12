@@ -72,7 +72,7 @@ if (Mix_Init(MIX_INIT_ADX) != MIX_INIT_ADX) {
     return eAB_error;
 }
 
-if (Mix_OpenAudio(22050, AUDIO_S16LSB, 2, 2048) < 0) {
+if (Mix_OpenAudio(22050, AUDIO_S16LSB, 1, 8192) < 0) {
     printf("SDL_mixer init error: %s\n", Mix_GetError());
     Mix_Quit();  // Clean up Mix_Init
     SDL_Quit();
@@ -88,7 +88,7 @@ tAudioBackend_error_code AudioBackend_InitCDA(void) {
     printf("AudioBackend_InitCDA\n");
 
     // Check if music files are present or not
-    if (access("MUSIC/Track02.wav", F_OK) == -1) {
+    if (access("MUSIC/Track02.adx", F_OK) == -1) {
         printf("Music not found\n");
         return eAB_error;
     }
@@ -127,7 +127,7 @@ tAudioBackend_error_code AudioBackend_PlayCDA(int track) {
     printf("AudioBackend_PlayCDA\n");
 
     char path[256];
-    sprintf(path, "MUSIC/Track0%d.wav", track);
+    sprintf(path, "MUSIC/Track0%d.adx", track);
 
     if (access(path, F_OK) == -1) {
         return eAB_error;

@@ -9,7 +9,7 @@
 SDL_Window* window;
 SDL_Renderer* renderer;
 SDL_Texture* screen_texture;
-uint32_t converted_palette[256];
+// uint32_t converted_palette[256];
 br_pixelmap* last_screen_src;
 int render_width, render_height;
 
@@ -23,9 +23,9 @@ static void* create_window_and_renderer(char* title, int x, int y, int width, in
     //SDL_setenv("SDL_AUDIODRIVER", "dummy", 1);
     render_width = width;
     render_height = height;
-    SDL_SetHint(SDL_HINT_VIDEO_DOUBLE_BUFFER, "1");    
+    // SDL_SetHint(SDL_HINT_VIDEO_DOUBLE_BUFFER, "1");    
     SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_TEXTURED_VIDEO");
-    //SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_DIRECT_VIDEO"); 
+    // SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_DIRECT_VIDEO"); 
     if (SDL_Init(SDL_INIT_VIDEO| SDL_INIT_AUDIO | SDL_INIT_JOYSTICK| SDL_INIT_GAMECONTROLLER) != 0) {
         LOG_PANIC("SDL_INIT_VIDEO error: %s", SDL_GetError());
     }
@@ -39,7 +39,7 @@ static void* create_window_and_renderer(char* title, int x, int y, int width, in
         SDL_WINDOWPOS_CENTERED,
         width, height,
         SDL_WINDOW_FULLSCREEN_DESKTOP);
-
+    printf("here6\n");
     if (window == NULL) {
         LOG_PANIC("Failed to create window: %s", SDL_GetError());
     }
@@ -47,10 +47,10 @@ static void* create_window_and_renderer(char* title, int x, int y, int width, in
     if (harness_game_config.start_full_screen) {
         SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN_DESKTOP);
     }
-    
+    printf("here7\n");
     // SDL_SetHint(SDL_HINT_RENDER_DRIVER, "software");
-    SDL_SetHint(SDL_HINT_RENDER_VSYNC, "1");
-    renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_PRESENTVSYNC); //SDL_RENDERER_PRESENTVSYNC
+    // SDL_SetHint(SDL_HINT_RENDER_VSYNC, "1");
+    renderer = SDL_CreateRenderer(window, 0, SDL_RENDERER_SOFTWARE); //SDL_RENDERER_PRESENTVSYNC
     if (renderer == NULL) {
         LOG_PANIC("Failed to create renderer: %s", SDL_GetError());
     }
@@ -59,7 +59,7 @@ static void* create_window_and_renderer(char* title, int x, int y, int width, in
     //printf("HERE2\n");
     SDL_RenderSetLogicalSize(renderer, render_width, render_height);
     printf("Video res: width %d. height %d\n ", width, height);
-    screen_texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, width, height); // 320x200
+    screen_texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB1555, SDL_TEXTUREACCESS_STREAMING, width, height); // 320x200
     //printf("HERE4\n");
     if (screen_texture == NULL) {
         SDL_RendererInfo info;
@@ -210,38 +210,81 @@ static void limit_fps(void) {
     last_frame_time = SDL_GetTicks();
 }
 
+static uint16_t converted_palette[256]; // Change to 16-bit for RGB565
+
 static void present_screen(br_pixelmap* src) {
-    // fastest way to convert 8 bit indexed to 32 bit
-    uint8_t* src_pixels = src->pixels;
-    uint32_t* dest_pixels;
-    int dest_pitch;
-
-    SDL_LockTexture(screen_texture, NULL, (void**)&dest_pixels, &dest_pitch);
-    for (int i = 0; i < src->height * src->width; i++) {
-        *dest_pixels = converted_palette[*src_pixels];
-        dest_pixels++;
-        src_pixels++;
+    #define VRAM_B(n) ((void *)(((uintptr_t)PVR_TA_TEX_MEM_32) + ((uintptr_t)vram_s - PVR_RAM_BASE) + (n))) // Fixed missing parenthesis
+    #define SQ_WRITE(sq, off) do { \
+            const uint16_t value = converted_palette[src_pixels[r * 320 + c + off]]; \
+            sq[r * 640 + c + off] = (value << 16) | value; \
+        } while(0)
+    
+    const uint8_t* src_pixels = src->pixels;
+    uint32_t *sq = sq_lock(VRAM_B(40 * 640 * 2));
+    uint32_t *sq2 = SQ_MASK_DEST(VRAM_B(41 * 640 * 2));
+    
+    for(int r = 0; r < 200; ++r) {
+        int c;
+        for (c = 0; c <= 320 - 32; c += 32) {
+            dcache_pref_block(&src_pixels[r * 320 + c + 32]);
+    
+            SQ_WRITE(sq, 0);
+            SQ_WRITE(sq, 1);
+            SQ_WRITE(sq, 2);
+            SQ_WRITE(sq, 3);
+            SQ_WRITE(sq, 4);
+            SQ_WRITE(sq, 5);
+            SQ_WRITE(sq, 6);
+            SQ_WRITE(sq, 7);
+            sq_flush(&sq[r * 640 + c + 0]);
+            sq_flush(&sq2[r * 640 + c + 0]);
+    
+            SQ_WRITE(sq, 8);
+            SQ_WRITE(sq, 9);
+            SQ_WRITE(sq,10);
+            SQ_WRITE(sq,11);
+            SQ_WRITE(sq,12);
+            SQ_WRITE(sq,13);
+            SQ_WRITE(sq,14);
+            SQ_WRITE(sq,15);
+            sq_flush(&sq[r * 640 + c + 8]);
+            sq_flush(&sq2[r * 640 + c + 8]);
+    
+            SQ_WRITE(sq, 16);
+            SQ_WRITE(sq, 17);
+            SQ_WRITE(sq, 18);
+            SQ_WRITE(sq, 19);
+            SQ_WRITE(sq, 20);
+            SQ_WRITE(sq, 21);
+            SQ_WRITE(sq, 22);
+            SQ_WRITE(sq, 23);
+            sq_flush(&sq[r * 640 + c + 16]);
+            sq_flush(&sq2[r * 640 + c + 16]);
+    
+            SQ_WRITE(sq, 24);
+            SQ_WRITE(sq, 25);
+            SQ_WRITE(sq, 26);
+            SQ_WRITE(sq, 27);
+            SQ_WRITE(sq, 28);
+            SQ_WRITE(sq, 29);
+            SQ_WRITE(sq, 30);
+            SQ_WRITE(sq, 31);
+            sq_flush(&sq[r * 640 + c + 24]);
+            sq_flush(&sq2[r * 640 + c + 24]);
+        }
     }
-    SDL_UnlockTexture(screen_texture);
-    SDL_RenderClear(renderer);
-    //SDL_RenderCopyEx(renderer, screen_texture, NULL, NULL, 0, NULL, SDL_FLIP_VERTICAL | SDL_FLIP_HORIZONTAL);
-    SDL_RenderCopy(renderer, screen_texture, NULL, NULL);
-    //SDL_RenderCopyEx(renderer, screen_texture, NULL, NULL, 0, NULL, SDL_FLIP_VERTICAL | SDL_FLIP_HORIZONTAL);
-    SDL_RenderPresent(renderer);
-
-    last_screen_src = src;
-
-    if (harness_game_config.fps != 0) {
-        limit_fps();
-    }
+    sq_unlock();
 }
 
 static void set_palette(PALETTEENTRY_* pal) {
     for (int i = 0; i < 256; i++) {
-        converted_palette[i] = (0xff << 24 | pal[i].peRed << 16 | pal[i].peGreen << 8 | pal[i].peBlue);
-    }
-    if (last_screen_src != NULL) {
-        present_screen(last_screen_src);
+        // Convert 8-bit color components to 5-6-5 RGB565 format
+        uint16_t red = (pal[i].peRed >> 3) & 0x1F;   // 5 bits for red
+        uint16_t green = (pal[i].peGreen >> 2) & 0x3F; // 6 bits for green
+        uint16_t blue = (pal[i].peBlue >> 3) & 0x1F;  // 5 bits for blue
+
+        // Pack into 16-bit RGB565 format
+        converted_palette[i] = (red << 11) | (green << 5) | blue;
     }
 }
 
