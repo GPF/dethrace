@@ -13,6 +13,8 @@
 #include <sys/stat.h>
 
 #ifdef __DREAMCAST__
+#include <dirent.h>
+#include <SDL.h>
 #include <unistd.h>
 #include <kos.h>
 
@@ -31,6 +33,51 @@ int access(const char *pathname, int mode) {
     }
 
     return ret;
+}
+#endif
+
+#ifdef __DREAMCAST__
+static int Harness_DreamcastRootHasData(const char* root_dir) {
+    char test_path[512];
+    size_t root_len;
+
+    if (root_dir == NULL || root_dir[0] == '\0') {
+        return 0;
+    }
+
+    root_len = strlen(root_dir);
+    snprintf(test_path, sizeof(test_path), "%s%sDATA/RACES.TXT",
+        root_dir,
+        root_dir[root_len - 1] == '/' ? "" : "/");
+    return access(test_path, F_OK) != -1;
+}
+
+static char* Harness_DreamcastFindRoot(void) {
+    static const char* root_candidates[] = {
+        "/pc/DETHRACE/",
+        "/pc/dethrace/",
+        "/pc/",
+        "/cd/DETHRACE/",
+        "/cd/dethrace/",
+        "/cd/",
+    };
+    char* base_path;
+
+    base_path = SDL_GetBasePath();
+    if (Harness_DreamcastRootHasData(base_path)) {
+        return base_path;
+    }
+    if (base_path != NULL) {
+        SDL_free(base_path);
+    }
+
+    for (int i = 0; i < (int)(sizeof(root_candidates) / sizeof(root_candidates[0])); i++) {
+        if (Harness_DreamcastRootHasData(root_candidates[i])) {
+            return strdup(root_candidates[i]);
+        }
+    }
+
+    return NULL;
 }
 #endif
 
@@ -92,8 +139,8 @@ static void Harness_DetectGameMode(void) {
         }
     } else {
     carmageddon:
-        if (access("DATA/CUTSCENE/Mix_intr.smk", F_OK) == -1) {
-            harness_game_info.defines.INTRO_SMK_FILE = "Mix_intr.smk";
+        if (access("DATA/CUTSCENE/MIX_INTR.SMK", F_OK) == -1) {
+            harness_game_info.defines.INTRO_SMK_FILE = "MIX_INTR.SMK";
         } else {
             harness_game_info.defines.INTRO_SMK_FILE = "MIX_INTR.SMK";
         }
@@ -197,7 +244,7 @@ void Harness_Init(int* argc, char* argv[]) {
     }
 #endif
 #ifdef __DREAMCAST__
-    char* root_dir = strdup("/cd/DETHRACE/");
+    char* root_dir = Harness_DreamcastFindRoot();
 #else
     char* root_dir = getenv("DETHRACE_ROOT_DIR");
 #endif
@@ -312,8 +359,152 @@ int Harness_ProcessCommandLine(int* argc, char* argv[]) {
 }
 
 // Filesystem hooks
+#ifdef __DREAMCAST__
+static int Harness_DreamcastResolvePathCaseInsensitive(const char* pathname, char* resolved_path, size_t resolved_path_size) {
+    char work_path[512];
+    char current_path[512];
+    char component[256];
+    const char* read_ptr;
+    size_t current_len;
+
+    if (pathname == NULL || pathname[0] == '\0' || resolved_path_size == 0) {
+        return 0;
+    }
+
+    strncpy(work_path, pathname, sizeof(work_path) - 1);
+    work_path[sizeof(work_path) - 1] = '\0';
+
+    if (work_path[0] == '/') {
+        strncpy(current_path, "/", sizeof(current_path) - 1);
+        current_path[sizeof(current_path) - 1] = '\0';
+        read_ptr = work_path + 1;
+    } else {
+        current_path[0] = '\0';
+        read_ptr = work_path;
+    }
+
+    while (*read_ptr != '\0') {
+        DIR* dir;
+        struct dirent* entry;
+        char dir_path[512];
+        char* write_ptr;
+        int found;
+
+        while (*read_ptr == '/') {
+            read_ptr++;
+        }
+        if (*read_ptr == '\0') {
+            break;
+        }
+
+        write_ptr = component;
+        while (*read_ptr != '\0' && *read_ptr != '/' && write_ptr < component + sizeof(component) - 1) {
+            *write_ptr++ = *read_ptr++;
+        }
+        *write_ptr = '\0';
+
+        if (strcmp(component, ".") == 0) {
+            continue;
+        }
+
+        if (current_path[0] == '\0') {
+            strncpy(dir_path, ".", sizeof(dir_path) - 1);
+        } else {
+            strncpy(dir_path, current_path, sizeof(dir_path) - 1);
+        }
+        dir_path[sizeof(dir_path) - 1] = '\0';
+
+        dir = opendir(dir_path);
+        if (dir == NULL) {
+            return 0;
+        }
+
+        found = 0;
+        while ((entry = readdir(dir)) != NULL) {
+            if (strcasecmp(entry->d_name, component) == 0) {
+                current_len = strlen(current_path);
+                if (current_len > 0 && current_path[current_len - 1] != '/') {
+                    if (current_len + 1 >= sizeof(current_path)) {
+                        closedir(dir);
+                        return 0;
+                    }
+                    current_path[current_len++] = '/';
+                    current_path[current_len] = '\0';
+                }
+                if (current_len + strlen(entry->d_name) >= sizeof(current_path)) {
+                    closedir(dir);
+                    return 0;
+                }
+                strcat(current_path, entry->d_name);
+                found = 1;
+                break;
+            }
+        }
+        closedir(dir);
+
+        if (!found) {
+            return 0;
+        }
+    }
+
+    if (current_path[0] == '\0') {
+        strncpy(current_path, ".", sizeof(current_path) - 1);
+        current_path[sizeof(current_path) - 1] = '\0';
+    }
+
+    if (strlen(current_path) >= resolved_path_size) {
+        return 0;
+    }
+    strcpy(resolved_path, current_path);
+    return 1;
+}
+
+static FILE* Harness_DreamcastTryFopen(const char* pathname, const char* mode) {
+    char resolved_path[512];
+    FILE* f;
+
+    errno = 0;
+    f = fopen(pathname, mode);
+    if (harness_game_config.verbose) {
+        printf("Harness_Hook_fopen Dreamcast try '%s' mode '%s' -> %p errno=%d\n", pathname, mode, (void*)f, errno);
+    }
+    if (f != NULL) {
+        return f;
+    }
+
+    if (pathname[0] != '/' &&
+        Harness_DreamcastResolvePathCaseInsensitive(pathname, resolved_path, sizeof(resolved_path)) &&
+        strcmp(resolved_path, pathname) != 0) {
+        errno = 0;
+        f = fopen(resolved_path, mode);
+        if (harness_game_config.verbose) {
+            printf("Harness_Hook_fopen Dreamcast case try '%s' mode '%s' -> %p errno=%d\n", resolved_path, mode, (void*)f, errno);
+        }
+        if (f != NULL) {
+            return f;
+        }
+    }
+
+    return NULL;
+}
+#endif
+
 FILE* Harness_Hook_fopen(const char* pathname, const char* mode) {
+#ifdef __DREAMCAST__
+    char dreamcast_mode[8];
+    int j = 0;
+
+    for (int i = 0; mode[i] != '\0' && j < (int)sizeof(dreamcast_mode) - 1; i++) {
+        if (mode[i] != 't') {
+            dreamcast_mode[j++] = mode[i];
+        }
+    }
+    dreamcast_mode[j] = '\0';
+
+    return Harness_DreamcastTryFopen(pathname, dreamcast_mode);
+#else
     return OS_fopen(pathname, mode);
+#endif
 }
 
 // Localization

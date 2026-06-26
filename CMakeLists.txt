@@ -75,10 +75,6 @@ find_package(SDL2 CONFIG)
 if(NOT SDL2_FOUND)
     find_package(SDL2 MODULE REQUIRED)
 endif()
-find_package(SDL2_mixer REQUIRED)
-
-find_package(SDL2_mixer REQUIRED)
-
 
 
 add_subdirectory(lib/BRender-v1.3.2)

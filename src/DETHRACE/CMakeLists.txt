@@ -15,14 +15,7 @@ if (DETHRACE_ASAN)
     target_link_options(dethrace_obj PUBLIC -fsanitize=address)
 endif()
 
-add_library(SDL2_mixer STATIC IMPORTED)
-set_target_properties(SDL2_mixer PROPERTIES
-    IMPORTED_LOCATION "/opt/toolchains/dc/kos/addons/lib/dreamcast/libSDL2_mixer.a"
-    INTERFACE_INCLUDE_DIRECTORIES "/opt/toolchains/dc/kos/addons/include/dreamcast/SDL2"  # adjust if needed
-)
-target_link_libraries(SDL2_mixer INTERFACE SDL2::SDL2)
-target_link_libraries(dethrace_obj PUBLIC SDL2::SDL2 smackw32 harness BRender::Full BRender::DDI s3 SDL2_mixer SDL2::SDL2 )
-
+target_link_libraries(dethrace_obj PUBLIC SDL2::SDL2 smackw32 harness BRender::Full BRender::DDI s3 GL)
 
 
 
@@ -62,8 +55,8 @@ if(DETHRACE_REPLAY_DEBUG)
     target_compile_definitions(dethrace_obj PRIVATE DETHRACE_REPLAY_DEBUG)
 endif()
 
-set(COMMON_COMPILE_FLAGS
-    -O3
+#set(COMMON_COMPILE_FLAGS
+#    -O3
 
     #-fno-math-errno
         #-fno-signed-zeros
@@ -78,13 +71,13 @@ set(COMMON_COMPILE_FLAGS
     #-fexcess-precision=fast
 
     #-fno-lto 
-    -fbuiltin 
-    -flto=auto
-    -ffast-math 
+ #   -fbuiltin 
+  #  -flto=auto
+   # -ffast-math 
     #-mfsca 
     #-mfsrra
-    -ffp-contract=fast
-)
+    #-ffp-contract=fast
+#)
 target_compile_options(dethrace_obj PRIVATE ${COMMON_COMPILE_FLAGS})
 
 set(OPTIMIZED_FILES 

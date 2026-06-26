@@ -5,6 +5,7 @@
 
 #include "brender.h"
 #include "controls.h"
+#include "harness/audio.h"
 #include "globvars.h"
 #include "graphics.h"
 #include "harness/trace.h"
@@ -47,6 +48,10 @@ br_vector3 gCamera_velocity;
 
 // IDA: void __cdecl UsePathFileToDetermineIfFullInstallation()
 void UsePathFileToDetermineIfFullInstallation(void) {
+#ifdef __DREAMCAST__
+    gCD_fully_installed = 1;
+    return;
+#else
     // changed by dethrace for compatibility
     // char line1[80];
     // char line2[80];
@@ -78,6 +83,7 @@ void UsePathFileToDetermineIfFullInstallation(void) {
     } else {
         gCD_fully_installed = 1;
     }
+#endif
 }
 
 // IDA: void __cdecl InitSound()
@@ -393,6 +399,7 @@ void SoundService(void) {
     if (gSound_enabled && !gServicing_sound) {
         gServicing_sound = 1;
         gLast_sound_service = PDGetTotalTime();
+        AudioBackend_ServiceCDA();
         if (gCDA_tag) {
             if (!S3IsCDAPlaying()) {
                 StopMusic();
@@ -698,17 +705,21 @@ int DRS3StartCDA(tS3_sound_id pCDA_id) {
                         } while (pCDA_id == gLast_tune);
                     }
                     gLast_tune = pCDA_id;
+                    printf("DRS3StartCDA: calling DRS3StartSoundNoPiping(%d)\n", pCDA_id);
                     gCDA_is_playing = DRS3StartSoundNoPiping(gMusic_outlet, pCDA_id);
-#if defined(DETHRACE_FIX_BUGS)
-                    // Initial CD music volume was not set correctly
-                    DRS3SetOutletVolume(gMusic_outlet, 42 * gProgram_state.music_volume);                    
-#endif
+                    printf("DRS3StartCDA: DRS3StartSoundNoPiping returned %d\n", gCDA_is_playing);
+                    printf("DRS3StartCDA: before gCDA_tag assign\n");
                     gCDA_tag = gCDA_is_playing;
+                    printf("DRS3StartCDA: after gCDA_tag assign\n");
                     if (!gCDA_is_playing) {
+                        printf("DRS3StartCDA: before disable CDA\n");
                         gCD_is_disabled = 1;
                         S3DisableCDA();
+                        printf("DRS3StartCDA: after disable CDA\n");
                     }
+                    printf("DRS3StartCDA: before reset repeat count\n");
                     gSong_repeat_count = 0;
+                    printf("DRS3StartCDA: after reset repeat count\n");
                 }
             }
         }
@@ -730,9 +741,13 @@ int DRS3StopCDA(void) {
 
 // IDA: void __cdecl StartMusic()
 void StartMusic(void) {
+    printf("StartMusic: enter\n");
     if (gCD_fully_installed) {
+        printf("StartMusic: before DRS3StartCDA\n");
         gCDA_tag = DRS3StartCDA(9999);
+        printf("StartMusic: after DRS3StartCDA -> %d\n", gCDA_tag);
     }
+    printf("StartMusic: exit\n");
 }
 
 // IDA: void __cdecl StopMusic()

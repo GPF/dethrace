@@ -127,7 +127,9 @@ static void present_screen(br_pixelmap* src) {
         fill_texture_rgb565(0x07E0); // bright green
     } else {
         uint8_t* src_pixels = (uint8_t*)src->pixels;
-        int w = src->width, h = src->height;
+        int w = src->width < TEX_WIDTH ? src->width : TEX_WIDTH;
+        int h = src->height < TEX_HEIGHT ? src->height : TEX_HEIGHT;
+        int row_bytes = src->row_bytes;
 
         for (int y = 0; y < h; y++) {
             uint32_t* dest_line32 = pvram_sq + (TEX_WIDTH / 2) * y;
@@ -138,7 +140,7 @@ static void present_screen(br_pixelmap* src) {
                 ((uint16_t*)dest_line32)[x] = c;
             }
             sq_unlock();
-            src_pixels += w;
+            src_pixels += row_bytes;
         }
     }
 

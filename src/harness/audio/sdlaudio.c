@@ -1,376 +1,765 @@
+#include "harness/audio.h"
+
 #include <SDL2/SDL.h>
-#include <SDL2/SDL_mixer.h>
+#include <SDL2/SDL_hints.h>
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <assert.h>
+#include <unistd.h>
 
-// Define your audio backend error codes
-typedef enum {
-    eAB_success = 0,
-    eAB_error = -1,
-} tAudioBackend_error_code;
+#define CDA_AUDIO_SAMPLES 4096
+#define AUDIOBACKEND_MAX_VOLUME 128
 
-// Define your audio backend stream structure
-typedef struct {
-    Mix_Chunk* chunk;      // Holds the Mix_Chunk for short sound effects (samples)
-    Mix_Music* music;      // Holds the Mix_Music for long audio tracks (background music)
-    int volume;            // Controls the volume of the audio (0 - MIX_MAX_VOLUME)
-    int pan;               // Controls the stereo panning (left-right balance)
-    int frequency;         // The frequency/sample rate of the audio
-    int initialized;       // Flag to indicate if the stream is properly initialized
-    int channel;           // The channel number on which the audio is being played
-    unsigned int sample_rate;  // The sample rate (frequency) of the audio
-    unsigned int channels;     // Number of audio channels (1 for mono, 2 for stereo, etc.)
-    int device_id;         // The ID of the audio device for SDL audio streaming
-} tAudioBackend_stream;
+struct tAudioBackend_stream_impl {
+    SDL_AudioDeviceID device;
+    SDL_AudioSpec spec;
+    Uint8* owned_data;
+    Uint32 owned_len;
+    int volume;
+    int pan;
+    int frequency;
+    int initialized;
+    int looping;
+#ifdef __DREAMCAST__
+    Uint32 play_end_ticks;
+    Uint32 play_duration_ticks;
+    int dreamcast_adpcm_sample;
+#endif
+};
 
+typedef struct tAudioBackend_stream_impl tAudioBackend_stream_impl;
 
-// Global variables
-static int g_audio_device_open = 0; // Global flag to track if the audio device is open
-static float g_volume_multiplier = 1.0f;
-static Mix_Music* cda_music = NULL;
+#ifdef __DREAMCAST__
+static tAudioBackend_stream_impl g_dreamcast_smacker_stream;
+static int g_dreamcast_smacker_stream_allocated;
+static int g_cda_suspended;
+#define DREAMCAST_SMACKER_MAX_QUEUED_AUDIO (128 * 1024)
 
-// Global or static buffer to hold streaming audio data
-// #define STREAM_BUFFER_SIZE (4096 * 4) // Example size, adjust as needed
-// static Uint8 stream_buffer[STREAM_BUFFER_SIZE];
-// static int stream_buffer_pos = 0;
-// static int stream_buffer_size = 0;
+extern int SDL_DreamcastQueueADPCMSfx(const void* data, Uint32 len);
 
-// Function prototypes
-tAudioBackend_error_code AudioBackend_Init(void);
-tAudioBackend_error_code AudioBackend_InitCDA(void);
-void AudioBackend_UnInit(void);
-void AudioBackend_UnInitCDA(void);
-tAudioBackend_error_code AudioBackend_StopCDA(void);
-tAudioBackend_error_code AudioBackend_PlayCDA(int track);
-int AudioBackend_CDAIsPlaying(void);
-tAudioBackend_error_code AudioBackend_SetCDAVolume(int volume);
-void* AudioBackend_AllocateSampleTypeStruct(void);
-tAudioBackend_error_code AudioBackend_PlaySample(void* type_struct_sample, int channels, void* data, int size, int rate, int loop);
-int AudioBackend_SoundIsPlaying(void* type_struct_sample);
-tAudioBackend_error_code AudioBackend_SetVolume(void* type_struct_sample, int volume);
-tAudioBackend_error_code AudioBackend_SetPan(void* type_struct_sample, int pan);
-tAudioBackend_error_code AudioBackend_SetFrequency(void* type_struct_sample, int original_rate, int new_rate);
-tAudioBackend_error_code AudioBackend_StopSample(void* type_struct_sample);
-tAudioBackend_stream* AudioBackend_StreamOpen(int bit_depth, int channels, unsigned int sample_rate);
-tAudioBackend_error_code AudioBackend_StreamWrite(void* stream_handle, const unsigned char* data, unsigned long size);
-tAudioBackend_error_code AudioBackend_StreamClose(tAudioBackend_stream* stream_handle);
+static int AudioBackend_ReinitDreamcastAudio(const char* adpcm_hint) {
+    if (SDL_WasInit(SDL_INIT_AUDIO) != 0) {
+        SDL_QuitSubSystem(SDL_INIT_AUDIO);
+    }
 
-// Initialize the audio backend
+    SDL_SetHint(SDL_HINT_AUDIO_ADPCM_STREAM_DC, adpcm_hint);
+    if (SDL_InitSubSystem(SDL_INIT_AUDIO) < 0) {
+        printf("Dreamcast: SDL audio reinit failed (hint=%s): %s\n", adpcm_hint, SDL_GetError());
+        return 0;
+    }
+
+    return 1;
+}
+#endif
+
+static struct {
+    SDL_AudioDeviceID device;
+    SDL_AudioSpec spec;
+    SDL_RWops* rw;
+    Sint64 data_start;
+    Uint8 ring[256 * 1024];
+    volatile Uint32 ring_read;
+    volatile Uint32 ring_write;
+    Uint32 len;
+    int eof;
+    int playing;
+    int volume;
+} cda;
+
+static Uint32 AudioBackend_ReadLE32(const Uint8* ptr) {
+    return ((Uint32)ptr[0]) | ((Uint32)ptr[1] << 8) | ((Uint32)ptr[2] << 16) | ((Uint32)ptr[3] << 24);
+}
+
+static Uint16 AudioBackend_ReadLE16(const Uint8* ptr) {
+    return (Uint16)(((Uint16)ptr[0]) | ((Uint16)ptr[1] << 8));
+}
+
+static SDL_INLINE Uint32 AudioBackend_CDARingFree(void) {
+    return (Uint32)sizeof(cda.ring) - (cda.ring_write - cda.ring_read);
+}
+
+static void AudioBackend_PumpCDA(void) {
+    if (cda.rw == NULL || cda.eof) {
+        return;
+    }
+
+    while (AudioBackend_CDARingFree() >= 4096u) {
+        Uint32 wpos = cda.ring_write % (Uint32)sizeof(cda.ring);
+        Uint32 chunk = SDL_min(4096u, (Uint32)sizeof(cda.ring) - wpos);
+        size_t got = SDL_RWread(cda.rw, cda.ring + wpos, 1, chunk);
+
+        if (got == 0) {
+            if (SDL_RWseek(cda.rw, cda.data_start, RW_SEEK_SET) < 0) {
+                cda.eof = 1;
+                return;
+            }
+            continue;
+        }
+
+        SDL_MemoryBarrierRelease();
+        cda.ring_write += (Uint32)got;
+    }
+}
+
+void AudioBackend_ServiceCDA(void) {
+    AudioBackend_PumpCDA();
+}
+
+static void AudioBackend_CloseQueuedDevice(tAudioBackend_stream_impl* stream) {
+    if (stream->device != 0) {
+        SDL_ClearQueuedAudio(stream->device);
+        SDL_CloseAudioDevice(stream->device);
+        stream->device = 0;
+    }
+    if (stream->owned_data != NULL) {
+#ifdef __DREAMCAST__
+        if (stream->dreamcast_adpcm_sample) {
+            SDL_FreeWAV(stream->owned_data);
+        } else
+#endif
+        {
+            SDL_free(stream->owned_data);
+        }
+        stream->owned_data = NULL;
+        stream->owned_len = 0;
+    }
+    stream->initialized = 0;
+    stream->looping = 0;
+#ifdef __DREAMCAST__
+    stream->play_end_ticks = 0;
+    stream->play_duration_ticks = 0;
+    stream->dreamcast_adpcm_sample = 0;
+#endif
+}
+
+#ifdef __DREAMCAST__
+static void AudioBackend_WriteLE16(Uint8* ptr, Uint16 value) {
+    ptr[0] = (Uint8)(value & 0xff);
+    ptr[1] = (Uint8)(value >> 8);
+}
+
+static void AudioBackend_WriteLE32(Uint8* ptr, Uint32 value) {
+    ptr[0] = (Uint8)(value & 0xff);
+    ptr[1] = (Uint8)((value >> 8) & 0xff);
+    ptr[2] = (Uint8)((value >> 16) & 0xff);
+    ptr[3] = (Uint8)(value >> 24);
+}
+
+static int AudioBackend_LoadDreamcastADPCMSample(tAudioBackend_stream_impl* stream, int channels, const Uint8* data, Uint32 size, int rate) {
+    Uint8* wav_data;
+    SDL_RWops* rw;
+    SDL_AudioSpec spec;
+    Uint32 loaded_len;
+    Uint32 byte_rate;
+    Uint16 block_align;
+
+    wav_data = (Uint8*)SDL_malloc(size + 44u);
+    if (wav_data == NULL) {
+        return 0;
+    }
+
+    SDL_memset(wav_data, 0, 44u);
+    SDL_memcpy(&wav_data[0], "RIFF", 4);
+    AudioBackend_WriteLE32(&wav_data[4], size + 36u);
+    SDL_memcpy(&wav_data[8], "WAVE", 4);
+    SDL_memcpy(&wav_data[12], "fmt ", 4);
+    AudioBackend_WriteLE32(&wav_data[16], 16u);
+    AudioBackend_WriteLE16(&wav_data[20], 0x0020u);
+    AudioBackend_WriteLE16(&wav_data[22], (Uint16)channels);
+    AudioBackend_WriteLE32(&wav_data[24], (Uint32)rate);
+    byte_rate = (Uint32)((rate > 0 ? rate : 22050) * (channels > 0 ? channels : 1) / 2);
+    block_align = (Uint16)((channels > 0 ? channels : 1) / 2);
+    if (block_align == 0) {
+        block_align = 1;
+    }
+    AudioBackend_WriteLE32(&wav_data[28], byte_rate);
+    AudioBackend_WriteLE16(&wav_data[32], block_align);
+    AudioBackend_WriteLE16(&wav_data[34], 4u);
+    SDL_memcpy(&wav_data[36], "data", 4);
+    AudioBackend_WriteLE32(&wav_data[40], size);
+    SDL_memcpy(&wav_data[44], data, size);
+
+    rw = SDL_RWFromMem(wav_data, (int)(size + 44u));
+    if (rw == NULL) {
+        SDL_free(wav_data);
+        return 0;
+    }
+
+    stream->owned_data = NULL;
+    stream->owned_len = 0;
+    loaded_len = 0;
+    if (SDL_LoadDreamcastADPCM_RW(rw, 1, &spec, &stream->owned_data, &loaded_len) == NULL) {
+        SDL_free(wav_data);
+        return 0;
+    }
+
+    SDL_free(wav_data);
+    stream->owned_len = loaded_len;
+    stream->spec = spec;
+    stream->dreamcast_adpcm_sample = 1;
+    return 1;
+}
+#endif
+
+static int AudioBackend_OpenAndQueue(tAudioBackend_stream_impl* stream, const SDL_AudioSpec* spec, const Uint8* data, Uint32 size) {
+    stream->spec = *spec;
+    stream->device = SDL_OpenAudioDevice(NULL, SDL_FALSE, &stream->spec, NULL, 0);
+    if (stream->device == 0) {
+        printf("SDL_OpenAudioDevice failed: %s\n", SDL_GetError());
+        return 0;
+    }
+    if (SDL_QueueAudio(stream->device, data, size) < 0) {
+        printf("SDL_QueueAudio failed: %s\n", SDL_GetError());
+        SDL_CloseAudioDevice(stream->device);
+        stream->device = 0;
+        return 0;
+    }
+    SDL_PauseAudioDevice(stream->device, 0);
+    stream->initialized = 1;
+    return 1;
+}
+
+static int AudioBackend_OpenDreamcastADPCMStream(const char* filename, SDL_AudioSpec* spec, SDL_RWops** audio_rw, Uint32* audio_len) {
+    SDL_RWops* rw;
+    Uint8 riff_header[12];
+    Uint8 chunk_header[8];
+    Uint8 fmt_data[64];
+    Uint32 sample_rate = 0;
+    Uint16 channels = 0;
+    Uint16 audio_format = 0;
+    Uint16 bits_per_sample = 0;
+    Uint32 data_size = 0;
+    Sint64 data_offset = -1;
+    Sint64 file_size;
+
+    if (audio_rw == NULL || audio_len == NULL || spec == NULL) {
+        SDL_InvalidParamError("audio_rw/audio_len/spec");
+        return -1;
+    }
+
+    *audio_rw = NULL;
+    *audio_len = 0;
+
+    rw = SDL_RWFromFile(filename, "rb");
+    if (rw == NULL) {
+        return -1;
+    }
+
+    if (SDL_RWread(rw, riff_header, sizeof(riff_header), 1) != 1) {
+        SDL_SetError("Failed to read WAV header");
+        SDL_RWclose(rw);
+        return -1;
+    }
+
+    if (SDL_memcmp(riff_header, "RIFF", 4) != 0 || SDL_memcmp(&riff_header[8], "WAVE", 4) != 0) {
+        SDL_SetError("Not a RIFF/WAVE file");
+        SDL_RWclose(rw);
+        return -1;
+    }
+
+    file_size = SDL_RWsize(rw);
+    if (file_size < 12) {
+        SDL_SetError("WAV file is too small");
+        SDL_RWclose(rw);
+        return -1;
+    }
+
+    while (SDL_RWtell(rw) + 8 <= file_size) {
+        Sint64 chunk_pos = SDL_RWtell(rw);
+        Uint32 chunk_size;
+
+        if (SDL_RWread(rw, chunk_header, sizeof(chunk_header), 1) != 1) {
+            SDL_SetError("Failed to read WAV chunk header");
+            SDL_RWclose(rw);
+            return -1;
+        }
+
+        chunk_size = AudioBackend_ReadLE32(&chunk_header[4]);
+        if (SDL_memcmp(chunk_header, "fmt ", 4) == 0) {
+            Uint32 fmt_size = SDL_min(chunk_size, (Uint32)sizeof(fmt_data));
+            if (SDL_RWread(rw, fmt_data, fmt_size, 1) != 1) {
+                SDL_SetError("Failed to read WAV fmt chunk");
+                SDL_RWclose(rw);
+                return -1;
+            }
+            if (fmt_size < 16) {
+                SDL_SetError("WAV fmt chunk too small");
+                SDL_RWclose(rw);
+                return -1;
+            }
+
+            audio_format = AudioBackend_ReadLE16(&fmt_data[0]);
+            channels = AudioBackend_ReadLE16(&fmt_data[2]);
+            sample_rate = AudioBackend_ReadLE32(&fmt_data[4]);
+            bits_per_sample = AudioBackend_ReadLE16(&fmt_data[14]);
+
+            if (chunk_size > fmt_size) {
+                if (SDL_RWseek(rw, (Sint64)(chunk_size - fmt_size), RW_SEEK_CUR) < 0) {
+                    SDL_SetError("Failed to skip remaining fmt data");
+                    SDL_RWclose(rw);
+                    return -1;
+                }
+            }
+        } else if (SDL_memcmp(chunk_header, "data", 4) == 0) {
+            data_offset = SDL_RWtell(rw);
+            data_size = chunk_size;
+            break;
+        } else {
+            if (SDL_RWseek(rw, (Sint64)chunk_size, RW_SEEK_CUR) < 0) {
+                SDL_SetError("Failed to skip WAV chunk");
+                SDL_RWclose(rw);
+                return -1;
+            }
+        }
+
+        if (chunk_size & 1) {
+            if (SDL_RWseek(rw, 1, RW_SEEK_CUR) < 0) {
+                SDL_SetError("Failed to skip WAV padding");
+                SDL_RWclose(rw);
+                return -1;
+            }
+        }
+
+        if (SDL_RWtell(rw) <= chunk_pos) {
+            SDL_SetError("WAV parser did not advance");
+            SDL_RWclose(rw);
+            return -1;
+        }
+    }
+
+    if (data_offset < 0 || data_size == 0) {
+        SDL_SetError("Failed to locate WAV data chunk");
+        SDL_RWclose(rw);
+        return -1;
+    }
+
+    if (audio_format != 0x0014 && audio_format != 0x0020) {
+        SDL_SetError("Unsupported WAV format");
+        SDL_RWclose(rw);
+        return -1;
+    }
+    if (channels == 0 || sample_rate == 0 || bits_per_sample == 0) {
+        SDL_SetError("Invalid WAV audio parameters");
+        SDL_RWclose(rw);
+        return -1;
+    }
+
+    if (bits_per_sample != 4) {
+        printf("Dreamcast CDA warning: expected 4-bit ADPCM but found %u-bit samples in %s\n",
+               bits_per_sample, filename);
+    }
+
+    if (SDL_RWseek(rw, data_offset, RW_SEEK_SET) < 0) {
+        SDL_SetError("Failed to seek to WAV data");
+        SDL_RWclose(rw);
+        return -1;
+    }
+
+    *audio_len = data_size;
+
+    SDL_zero(*spec);
+    spec->freq = (int)sample_rate;
+    spec->format = AUDIO_S16;
+    spec->channels = (Uint8)channels;
+    spec->samples = 4096;
+    spec->silence = 0x00;
+    spec->size = *audio_len;
+
+    *audio_rw = rw;
+    return 0;
+}
+
+static void SDLCALL AudioBackend_CDAFill(void* userdata, Uint8* stream, int len) {
+    (void)userdata;
+    SDL_memset(stream, cda.spec.silence, len);
+    if (!cda.playing) {
+        return;
+    }
+
+    while (len > 0) {
+        Uint32 avail = cda.ring_write - cda.ring_read;
+
+        if (avail == 0) {
+            return;
+        }
+
+        Uint32 rpos = cda.ring_read % (Uint32)sizeof(cda.ring);
+        Uint32 copy_len = SDL_min((Uint32)len, SDL_min(avail, (Uint32)sizeof(cda.ring) - rpos));
+
+        SDL_memcpy(stream, cda.ring + rpos, copy_len);
+        SDL_MemoryBarrierRelease();
+        cda.ring_read += copy_len;
+
+        stream += copy_len;
+        len -= (int)copy_len;
+    }
+}
+
 tAudioBackend_error_code AudioBackend_Init(void) {
-
-if (SDL_Init(SDL_INIT_AUDIO) < 0) {
-    printf("SDL init error: %s\n", SDL_GetError());
-    return eAB_error;
+    if (SDL_InitSubSystem(SDL_INIT_AUDIO) < 0) {
+        printf("SDL audio init error: %s\n", SDL_GetError());
+        return eAB_error;
+    }
+    return eAB_success;
 }
 
-// Initialize ADX support
-if (Mix_Init(MIX_INIT_ADX) != MIX_INIT_ADX) {
-    printf("Could not initialize mixer with ADX support: %s\n", Mix_GetError());
-    SDL_Quit();
-    return eAB_error;
-}
-
-if (Mix_OpenAudio(22050, AUDIO_S16LSB, 1, 8192) < 0) {
-    printf("SDL_mixer init error: %s\n", Mix_GetError());
-    Mix_Quit();  // Clean up Mix_Init
-    SDL_Quit();
-    return eAB_error;
-}
-
-printf("Audio initialized\n");
-return eAB_success;
-}
-
-// Initialize CDA (CD Audio) playback
 tAudioBackend_error_code AudioBackend_InitCDA(void) {
-    printf("AudioBackend_InitCDA\n");
-
-    // Check if music files are present or not
-    if (access("MUSIC/Track02.adx", F_OK) == -1) {
+#ifdef __DREAMCAST__
+    SDL_SetHint(SDL_HINT_AUDIO_ADPCM_STREAM_DC, "1");
+#endif
+    if (access("MUSIC/Track02.wav", F_OK) == -1) {
         printf("Music not found\n");
         return eAB_error;
     }
-    printf("Music found\n");
-
     return eAB_success;
 }
-// Uninitialize the audio backend
+
 void AudioBackend_UnInit(void) {
-    Mix_CloseAudio();
-    SDL_Quit();
+    SDL_QuitSubSystem(SDL_INIT_AUDIO);
 }
-// Uninitialize CDA playback
+
 void AudioBackend_UnInitCDA(void) {
-    if (cda_music) {
-        Mix_FreeMusic(cda_music);
-        cda_music = NULL;
-    }
-    SDL_Log("AudioBackend_UnInitCDA\n");
-}
-
-// Stop CDA playback (reinitialized during cutscenes)
-tAudioBackend_error_code AudioBackend_StopCDA(void) {
-    if (cda_music && Mix_PlayingMusic()) {
-        SDL_Log("AudioBackend_StopCDA\n");
-        Mix_HaltMusic();
-        Mix_FreeMusic(cda_music);
-        cda_music = NULL;
-    }
-
-    return eAB_success;
-}
-
-// Play a CDA track (reinitialized during cutscenes)
-tAudioBackend_error_code AudioBackend_PlayCDA(int track) {
-    printf("AudioBackend_PlayCDA\n");
-
-    char path[256];
-    sprintf(path, "MUSIC/Track0%d.adx", track);
-
-    if (access(path, F_OK) == -1) {
-        return eAB_error;
-    }
-
     AudioBackend_StopCDA();
+}
 
-    cda_music = Mix_LoadMUS(path);
-    if (!cda_music) {
-        printf("Failed to load music: %s\n", Mix_GetError());
-        return eAB_error;
+tAudioBackend_error_code AudioBackend_StopCDA(void) {
+    if (cda.device != 0) {
+        SDL_LockAudioDevice(cda.device);
+        cda.playing = 0;
+        cda.len = 0;
+        cda.ring_read = 0;
+        cda.ring_write = 0;
+        SDL_UnlockAudioDevice(cda.device);
+        SDL_CloseAudioDevice(cda.device);
+        cda.device = 0;
     }
-
-    if (Mix_PlayMusic(cda_music, 0) == -1) {
-        printf("Failed to play music: %s\n", Mix_GetError());
-        return eAB_error;
+    if (cda.rw != NULL) {
+        SDL_RWclose(cda.rw);
+        cda.rw = NULL;
     }
-
+    cda.data_start = 0;
+    cda.ring_read = 0;
+    cda.ring_write = 0;
+    cda.eof = 0;
+    cda.playing = 0;
+    cda.len = 0;
     return eAB_success;
 }
 
+tAudioBackend_error_code AudioBackend_PlayCDA(int track) {
+    char path[256];
+    SDL_AudioSpec spec;
+    SDL_RWops* rw;
+    Uint32 len;
 
-// Check if CDA is playing
+#ifdef __DREAMCAST__
+    if (track >= 9600 && track <= 9607) {
+        track = track - 9600 + 2;
+    }
+#endif
+
+    snprintf(path, sizeof(path), "MUSIC/Track%02d.wav", track);
+    if (access(path, F_OK) == -1) {
+        printf("Dreamcast CDA missing: %s\n", path);
+        return eAB_error;
+    }
+
+    printf("Dreamcast CDA start: %s\n", path);
+    AudioBackend_StopCDA();
+    rw = NULL;
+    len = 0;
+    printf("Dreamcast CDA loading ADPCM stream\n");
+    if (AudioBackend_OpenDreamcastADPCMStream(path, &spec, &rw, &len) < 0) {
+        printf("Failed to load music %s: %s\n", path, SDL_GetError());
+        return eAB_error;
+    }
+    printf("Dreamcast CDA stream loaded: freq=%d channels=%u len=%lu\n", spec.freq, spec.channels, (unsigned long)len);
+
+    cda.rw = rw;
+    cda.data_start = SDL_RWtell(rw);
+    cda.len = len;
+    cda.ring_read = 0;
+    cda.ring_write = 0;
+    cda.eof = 0;
+    cda.playing = 1;
+    AudioBackend_PumpCDA();
+
+    spec.callback = AudioBackend_CDAFill;
+#ifdef __DREAMCAST__
+    SDL_SetHint(SDL_HINT_AUDIO_ADPCM_STREAM_DC, "1");
+#endif
+    cda.spec = spec;
+    printf("Dreamcast CDA opening audio device\n");
+    cda.device = SDL_OpenAudioDevice(NULL, SDL_FALSE, &cda.spec, NULL, 0);
+    if (cda.device == 0) {
+        printf("Failed to open music audio device: %s\n", SDL_GetError());
+        AudioBackend_StopCDA();
+        return eAB_error;
+    }
+    printf("Dreamcast CDA device opened: %u\n", (unsigned int)cda.device);
+    printf("Dreamcast CDA queued and unlocked\n");
+    SDL_PauseAudioDevice(cda.device, 0);
+    printf("Dreamcast CDA playback started\n");
+    return eAB_success;
+}
+
 int AudioBackend_CDAIsPlaying(void) {
-        return Mix_PlayingMusic();
+    if (cda.playing) {
+        AudioBackend_PumpCDA();
     }
+    return cda.playing && cda.rw != NULL && cda.device != 0 && SDL_GetAudioDeviceStatus(cda.device) == SDL_AUDIO_PLAYING;
+}
 
-// Set CDA volume
 tAudioBackend_error_code AudioBackend_SetCDAVolume(int volume) {
-        printf("AudioBackend_SetCDAVolume\n");
-        Mix_VolumeMusic(volume * 255 / 128);
-        return eAB_success;
-    }
+    cda.volume = volume;
+    return eAB_success;
+}
 
-// Allocate a sample type structure
 void* AudioBackend_AllocateSampleTypeStruct(void) {
-    tAudioBackend_stream* sample_struct = malloc(sizeof(tAudioBackend_stream));
-    if (sample_struct) {
-        memset(sample_struct, 0, sizeof(tAudioBackend_stream));
+    tAudioBackend_stream_impl* sample_struct = malloc(sizeof(tAudioBackend_stream_impl));
+    if (sample_struct != NULL) {
+        memset(sample_struct, 0, sizeof(tAudioBackend_stream_impl));
+        sample_struct->volume = AUDIOBACKEND_MAX_VOLUME;
     }
     return sample_struct;
 }
 
-    // Play a sample
-    tAudioBackend_error_code AudioBackend_PlaySample(void* type_struct_sample, int channels, void* data, int size, int rate, int loop) {
-        tAudioBackend_stream* stream = (tAudioBackend_stream*)type_struct_sample;
-        assert(stream != NULL);
+tAudioBackend_error_code AudioBackend_PlaySample(void* type_struct_sample, int channels, void* data, int size, int rate, int loop) {
+#ifndef __DREAMCAST__
+    SDL_AudioSpec spec;
+#endif
+    int effective_rate;
+    tAudioBackend_stream_impl* stream = (tAudioBackend_stream_impl*)type_struct_sample;
 
-        // Load sample from memory
-        Mix_Chunk* chunk = Mix_LoadWAV_RW(SDL_RWFromMem(data, size), 1);
-        if (!chunk) {
-            printf("Failed to load sample: %s\n", Mix_GetError());
-            return eAB_error;
-        }
-
-        // Play sample
-        int channel = Mix_PlayChannel(-1, chunk, loop ? -1 : 0);
-        if (channel == -1) {
-            printf("Failed to play sample: %s\n", Mix_GetError());
-            Mix_FreeChunk(chunk);
-            return eAB_error;
-        }
-
-        // Store chunk and channel in stream
-        stream->chunk = chunk;
-        stream->channel = channel;
-        stream->initialized = 1;
-
-        return eAB_success;
-    }
-
-    // Check if a sample is playing
-    int AudioBackend_SoundIsPlaying(void* type_struct_sample) {
-        tAudioBackend_stream* stream = (tAudioBackend_stream*)type_struct_sample;
-        assert(stream != NULL);
-
-        return Mix_Playing(-1);
-    }
-
-    // Set sample volume
-    tAudioBackend_error_code AudioBackend_SetVolume(void* type_struct_sample, int volume) {
-        tAudioBackend_stream* stream = (tAudioBackend_stream*)type_struct_sample;
-        assert(stream != NULL);
-
-        if (!stream->initialized) {
-            stream->volume = volume;
-            return eAB_success;
-        }
-
-        Mix_Volume(stream->channel, (volume * MIX_MAX_VOLUME) / 255);
-        return eAB_success;
-    }
-
-    tAudioBackend_error_code AudioBackend_SetPan(void* type_struct_sample, int pan) {
-        tAudioBackend_stream* stream = (tAudioBackend_stream*)type_struct_sample;
-        assert(stream != NULL);
-
-        if (!stream->initialized) {
-            stream->pan = pan;
-            return eAB_success;
-        }
-
-        // Convert pan from -10000 (left) to 10000 (right) to SDL's 0-255 scale
-        Uint8 left = (pan <= 0) ? 255 : (255 * (10000 - pan)) / 10000;
-        Uint8 right = (pan >= 0) ? 255 : (255 * (10000 + pan)) / 10000;
-        Mix_SetPanning(stream->channel, left, right);
-        return eAB_success;
-    }
-
-    // Set sample frequency
-    tAudioBackend_error_code AudioBackend_SetFrequency(void* type_struct_sample, int original_rate, int new_rate) {
-        tAudioBackend_stream* stream = (tAudioBackend_stream*)type_struct_sample;
-        assert(stream != NULL);
-
-        if (!stream->initialized) {
-            stream->frequency = new_rate;
-            return eAB_success;
-        }
-
-        // SDL2_mixer does not support changing the frequency of a playing sample directly.
-        // You may need to stop and restart the sample with the new frequency.
-        return eAB_success;
-    }
-
-    tAudioBackend_error_code AudioBackend_SetVolumeSeparate(void* type_struct_sample, int left_volume, int right_volume) {
+    assert(stream != NULL);
+    if (data == NULL || size <= 0) {
         return eAB_error;
     }
 
-    // Stop a sample
-    tAudioBackend_error_code AudioBackend_StopSample(void* type_struct_sample) {
-        tAudioBackend_stream* stream = (tAudioBackend_stream*)type_struct_sample;
-        assert(stream != NULL);
+    effective_rate = stream->frequency > 0 ? stream->frequency : rate;
+    AudioBackend_CloseQueuedDevice(stream);
 
-        if (stream->initialized) {
-            Mix_HaltChannel(stream->channel);
-            Mix_FreeChunk(stream->chunk);
-            stream->initialized = 0;
-            stream->chunk = NULL;
-        }
-        return eAB_success;
+#ifdef __DREAMCAST__
+    if (!AudioBackend_LoadDreamcastADPCMSample(stream, channels, (const Uint8*)data, (Uint32)size, effective_rate)) {
+        return eAB_error;
     }
 
-// Open a stream for Smacker audio
+    if (SDL_DreamcastQueueADPCMSfx(stream->owned_data, stream->owned_len) <= 0) {
+        printf("SDL_DreamcastQueueADPCMSfx failed: %s\n", SDL_GetError());
+        AudioBackend_CloseQueuedDevice(stream);
+        return eAB_error;
+    }
+
+    stream->looping = loop ? 1 : 0;
+    stream->play_duration_ticks = effective_rate > 0
+        ? ((Uint32)size * 2u * 1000u / (Uint32)((channels > 0 ? channels : 1) * effective_rate)) + 50u
+        : 50u;
+    stream->play_end_ticks = SDL_GetTicks() + stream->play_duration_ticks;
+    stream->initialized = 1;
+    return eAB_success;
+#else
+    (void)loop;
+    SDL_zero(spec);
+    spec.freq = effective_rate;
+    spec.format = AUDIO_S16LSB;
+    spec.channels = (Uint8)channels;
+    spec.samples = 4096;
+
+    if (!AudioBackend_OpenAndQueue(stream, &spec, (const Uint8*)data, (Uint32)size)) {
+        return eAB_error;
+    }
+    return eAB_success;
+#endif
+}
+
+int AudioBackend_SoundIsPlaying(void* type_struct_sample) {
+    tAudioBackend_stream_impl* stream = (tAudioBackend_stream_impl*)type_struct_sample;
+    assert(stream != NULL);
+#ifdef __DREAMCAST__
+    if (stream->dreamcast_adpcm_sample) {
+        if (stream->looping) {
+            if (SDL_TICKS_PASSED(SDL_GetTicks(), stream->play_end_ticks)) {
+                if (stream->owned_data != NULL && stream->owned_len > 0) {
+                    if (SDL_DreamcastQueueADPCMSfx(stream->owned_data, stream->owned_len) <= 0) {
+                        printf("SDL_DreamcastQueueADPCMSfx failed: %s\n", SDL_GetError());
+                        AudioBackend_CloseQueuedDevice(stream);
+                        return 0;
+                    }
+                    stream->play_end_ticks = SDL_GetTicks() + stream->play_duration_ticks;
+                }
+            }
+            return 1;
+        }
+        if (SDL_TICKS_PASSED(SDL_GetTicks(), stream->play_end_ticks) == SDL_FALSE) {
+            return 1;
+        }
+        AudioBackend_CloseQueuedDevice(stream);
+        return 0;
+    }
+#endif
+    return stream->device != 0 && SDL_GetQueuedAudioSize(stream->device) > 0;
+}
+
+tAudioBackend_error_code AudioBackend_SetVolume(void* type_struct_sample, int volume) {
+    tAudioBackend_stream_impl* stream = (tAudioBackend_stream_impl*)type_struct_sample;
+    assert(stream != NULL);
+    stream->volume = volume;
+    return eAB_success;
+}
+
+tAudioBackend_error_code AudioBackend_SetPan(void* type_struct_sample, int pan) {
+    tAudioBackend_stream_impl* stream = (tAudioBackend_stream_impl*)type_struct_sample;
+    assert(stream != NULL);
+    stream->pan = pan;
+    return eAB_success;
+}
+
+tAudioBackend_error_code AudioBackend_SetFrequency(void* type_struct_sample, int original_rate, int new_rate) {
+    tAudioBackend_stream_impl* stream = (tAudioBackend_stream_impl*)type_struct_sample;
+    (void)original_rate;
+    assert(stream != NULL);
+    stream->frequency = new_rate;
+    return eAB_success;
+}
+
+tAudioBackend_error_code AudioBackend_SetVolumeSeparate(void* type_struct_sample, int left_volume, int right_volume) {
+    tAudioBackend_stream_impl* stream = (tAudioBackend_stream_impl*)type_struct_sample;
+    assert(stream != NULL);
+    stream->volume = (left_volume + right_volume) / 2;
+    stream->pan = right_volume - left_volume;
+    return eAB_success;
+}
+
+tAudioBackend_error_code AudioBackend_StopSample(void* type_struct_sample) {
+    tAudioBackend_stream_impl* stream = (tAudioBackend_stream_impl*)type_struct_sample;
+    assert(stream != NULL);
+    AudioBackend_CloseQueuedDevice(stream);
+    return eAB_success;
+}
+
 tAudioBackend_stream* AudioBackend_StreamOpen(int bit_depth, int channels, unsigned int sample_rate) {
-    tAudioBackend_stream* stream = malloc(sizeof(tAudioBackend_stream));
-    if (!stream) {
-        printf("Failed to allocate memory for audio stream\n");
-        return NULL;
-    }
-    SDL_Log("AudioBackend_StreamOpen\n");
-    // AudioBackend_Init();
-    // Mix_CloseAudio(); 
-    // SDL_CloseAudioDevice(0);
-    // SDL_Delay(2000); 
-    // if(Mix_OpenAudio(22050, AUDIO_S16LSB, channels, 2048)< 0) {
-    //     SDL_Log("Mix_OpenAudio failed: %s", Mix_GetError());
-    // }
-    // SDL_Delay(3000); 
-      SDL_Log("AudioBackend_StreamOpen2\n");
-    // Initialize the stream struct
-    memset(stream, 0, sizeof(tAudioBackend_stream));
-    stream->sample_rate = 22050;
-    stream->channels = 2;
-    stream->channel = -1;  // No channel assigned yet
+    tAudioBackend_stream_impl* stream;
+    SDL_AudioSpec spec;
 
-    // Validate the channel count (should be 1 for mono, 2 for stereo)
-    if (stream->channels != 1 && stream->channels != 2) {
-        printf("Invalid number of channels: %d\n", stream->channels);
-        free(stream);
+    if (bit_depth != 8 && bit_depth != 16) {
         return NULL;
     }
 
-    // Set the sample rate (ensure it's a valid rate)
-    if (stream->sample_rate < 8000 || stream->sample_rate > 48000) {
-        printf("Invalid sample rate: %u\n", sample_rate);
-        free(stream);
-        return NULL;
-    }
+    SDL_zero(spec);
+    spec.freq = (int)sample_rate;
+    spec.format = bit_depth == 8 ? AUDIO_U8 : AUDIO_S16LSB;
+    spec.channels = (Uint8)channels;
+    spec.samples = 2048;
 
-    return stream;
-}
-
-
-// Write audio data to the stream
-// StreamWrite function without conversion, directly handling 8-bit audio
-tAudioBackend_error_code AudioBackend_StreamWrite(void* stream_handle, const unsigned char* data, unsigned long size) {
-    tAudioBackend_stream* stream = (tAudioBackend_stream*)stream_handle;
-    if (!stream || !data || size == 0) {
-        printf("Invalid stream or data\n");
-        return eAB_error;
-    }
-    // SDL_Log("AudioBackend_StreamWrite\n");
-    // Directly load the 8-bit audio data into Mix_QuickLoad_RAW
-    Mix_Chunk* chunk = Mix_QuickLoad_RAW(data, size);
-    if (!chunk) {
-        printf("Failed to create Mix_Chunk: %s\n", Mix_GetError());
-        return eAB_error;
-    }
-
-    int channel = Mix_PlayChannel(-1, chunk, 0);
-    if (channel == -1) {
-        printf("Failed to play audio: %s\n", Mix_GetError());
-        Mix_FreeChunk(chunk);
-        return eAB_error;
-    }
-
-    if (stream->chunk) {
-        Mix_FreeChunk(stream->chunk); // Free previous chunk if needed
-    }
-    stream->chunk = chunk;
-    stream->channel = channel;
-
-    return eAB_success;
-}
-
-void S3EnableCDA(void);
-// Close the stream
-tAudioBackend_error_code AudioBackend_StreamClose(tAudioBackend_stream* stream_handle) {
-    tAudioBackend_stream* stream = (tAudioBackend_stream*)stream_handle;
-    if (stream) {
-        // Stop and clean up the audio chunk when done
-        if (stream->chunk) {
-            Mix_HaltChannel(stream->channel);  // Stop the channel
-            Mix_FreeChunk(stream->chunk);      // Free the chunk
-            stream->chunk = NULL;
-            stream->channel = -1;
+#ifdef __DREAMCAST__
+    if (g_dreamcast_smacker_stream_allocated) {
+        stream = &g_dreamcast_smacker_stream;
+        if (stream->spec.freq != spec.freq || stream->spec.format != spec.format || stream->spec.channels != spec.channels) {
+            printf("Dreamcast Smacker audio format changed; skipping stream to avoid SDL audio close\n");
+            return NULL;
         }
-
-        free(stream);
+        return (tAudioBackend_stream*)stream;
     }
-    // Mix_CloseAudio(); 
-    //     SDL_CloseAudioDevice(0);
-    // SDL_Delay(2000); 
-    // if(Mix_OpenAudio(22050, AUDIO_S16LSB, 2, 2048)< 0) {
-    //     SDL_Log("Mix_OpenAudio failed: %s", Mix_GetError());
-    // }
-    // Mix_CloseAudio(); 
-    // AudioBackend_Init();
-    // AudioBackend_InitCDA();
-    // S3EnableCDA();
 
-    SDL_Log("AudioBackend_StreamClose\n");
-    // SDL_Delay(3000); 
+    /* CloseDevice tears down the KOS stream layer. If CDA was active, suspend
+     * it and bounce SDL audio so snd_stream_init() runs again on reopen. */
+    g_cda_suspended = 0;
+    if (cda.device != 0) {
+        AudioBackend_StopCDA();
+        g_cda_suspended = 1;
+        printf("Dreamcast: CDA suspended for Smacker stream\n");
+    }
+    stream = &g_dreamcast_smacker_stream;
+    memset(stream, 0, sizeof(*stream));
+    stream->volume = AUDIOBACKEND_MAX_VOLUME;
+    stream->spec = spec;
+
+    if (!AudioBackend_ReinitDreamcastAudio("0")) {
+        if (g_cda_suspended) {
+            AudioBackend_ReinitDreamcastAudio("1");
+            g_cda_suspended = 0;
+        }
+        memset(stream, 0, sizeof(*stream));
+        return NULL;
+    }
+    printf("Dreamcast: SDL audio restarted in PCM mode for Smacker\n");
+
+    g_dreamcast_smacker_stream_allocated = 1;
+#else
+    stream = AudioBackend_AllocateSampleTypeStruct();
+    if (stream == NULL) {
+        return NULL;
+    }
+#endif
+
+    stream->spec = spec;
+    return (tAudioBackend_stream*)stream;
+}
+
+tAudioBackend_error_code AudioBackend_StreamWrite(tAudioBackend_stream* stream_handle, const unsigned char* data, unsigned long size) {
+    tAudioBackend_stream_impl* stream = (tAudioBackend_stream_impl*)stream_handle;
+
+    if (stream == NULL || data == NULL || size == 0) {
+        return eAB_error;
+    }
+    if (size > 0xffffffffu) {
+        return eAB_error;
+    }
+    if (stream->device == 0) {
+        if (!AudioBackend_OpenAndQueue(stream, &stream->spec, data, (Uint32)size)) {
+            return eAB_error;
+        }
+        return eAB_success;
+    }
+#ifdef __DREAMCAST__
+    if (stream == &g_dreamcast_smacker_stream && SDL_GetQueuedAudioSize(stream->device) > DREAMCAST_SMACKER_MAX_QUEUED_AUDIO) {
+        return eAB_success;
+    }
+#else
+    SDL_PauseAudioDevice(stream->device, 0);
+#endif
+    if (SDL_QueueAudio(stream->device, data, (Uint32)size) < 0) {
+        printf("SDL_QueueAudio failed: %s\n", SDL_GetError());
+        return eAB_error;
+    }
     return eAB_success;
 }
 
+tAudioBackend_error_code AudioBackend_StreamClose(tAudioBackend_stream* stream_handle) {
+    tAudioBackend_stream_impl* stream = (tAudioBackend_stream_impl*)stream_handle;
+    if (stream != NULL) {
+#ifdef __DREAMCAST__
+    if (stream == &g_dreamcast_smacker_stream) {
+            if (stream->device != 0) {
+                Uint32 drain_start = SDL_GetTicks();
+                Uint32 queued = SDL_GetQueuedAudioSize(stream->device);
+                printf("Dreamcast: Smacker stream close begin queued=%lu\n", (unsigned long)queued);
+                while (queued > stream->spec.size && SDL_GetTicks() - drain_start < 250u) {
+                    SDL_Delay(1);
+                    queued = SDL_GetQueuedAudioSize(stream->device);
+                }
+                printf("Dreamcast: Smacker stream close drain queued=%lu\n", (unsigned long)queued);
+                SDL_ClearQueuedAudio(stream->device);
+                SDL_Delay(20);
+                printf("Dreamcast: Smacker stream close device\n");
+                SDL_CloseAudioDevice(stream->device);
+                printf("Dreamcast: Smacker stream device closed\n");
+                stream->device = 0;
+            }
+            stream->initialized = 0;
+            g_dreamcast_smacker_stream_allocated = 0;
+            if (g_cda_suspended) {
+                if (AudioBackend_ReinitDreamcastAudio("1")) {
+                    printf("Dreamcast: SDL audio restored to ADPCM mode after Smacker\n");
+                }
+            }
+            g_cda_suspended = 0;
+            return eAB_success;
+        }
+#endif
+        AudioBackend_CloseQueuedDevice(stream);
+        free(stream);
+    }
+    return eAB_success;
+}

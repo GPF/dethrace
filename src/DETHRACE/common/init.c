@@ -348,35 +348,52 @@ void Init2DStuff(void) {
 // IDA: void __usercall InitialiseApplication(int pArgc@<EAX>, char **pArgv@<EDX>)
 void InitialiseApplication(int pArgc, char** pArgv) {
 
+    printf("InitialiseApplication: begin\n");
     if (harness_game_config.gore_check) {
         gProgram_state.sausage_eater_mode = gSausage_override ? 1 : (PDGetGorePassword() ? 0 : 1);
         PDDisplayGoreworthiness(!gProgram_state.sausage_eater_mode);
     } else {
         gProgram_state.sausage_eater_mode = gSausage_override;
     }
+    printf("InitialiseApplication: after gore\n");
 
     MAMSInitMem();
-    PrintMemoryDump(gSausage_override, *pArgv);
+    printf("InitialiseApplication: after MAMSInitMem\n");
+    PrintMemoryDump(gSausage_override, (pArgc > 0 && pArgv != NULL && pArgv[0] != NULL) ? pArgv[0] : "dethrace");
+    printf("InitialiseApplication: after PrintMemoryDump\n");
     if (gAustere_override || PDDoWeLeadAnAustereExistance() != 0) {
         gAusterity_mode = 1;
     }
+    printf("InitialiseApplication: after austere check\n");
 
     srand(time(NULL));
+    printf("InitialiseApplication: before BrV1dbBeginWrapper_Float\n");
     BrV1dbBeginWrapper_Float();
+    printf("InitialiseApplication: after BrV1dbBeginWrapper_Float\n");
     CreateStainlessClasses();
+    printf("InitialiseApplication: after CreateStainlessClasses\n");
     InitWobbleStuff();
+    printf("InitialiseApplication: after InitWobbleStuff\n");
     LoadGeneralParameters();
+    printf("InitialiseApplication: after LoadGeneralParameters\n");
     DefaultNetName();
+    printf("InitialiseApplication: after DefaultNetName\n");
     strcpy(gProgram_state.player_name[0], "MAX DAMAGE");
     strcpy(gProgram_state.player_name[1], "DIE ANNA");
     RestoreOptions();
+    printf("InitialiseApplication: after RestoreOptions\n");
     LoadKeyMapping();
+    printf("InitialiseApplication: after LoadKeyMapping\n");
     if (!PDInitScreenVars(pArgc, pArgv)) {
         FatalError(kFatalError_UnsupportedScreenDepth);
     }
+    printf("InitialiseApplication: after PDInitScreenVars\n");
     CalcGrafDataIndex();
+    printf("InitialiseApplication: after CalcGrafDataIndex\n");
     PDInitScreen();
+    printf("InitialiseApplication: after PDInitScreen\n");
     InitializeBRenderEnvironment();
+    printf("InitialiseApplication: after InitializeBRenderEnvironment\n");
     InitDRFonts();
     InitBRFonts();
     LoadMiscStrings();

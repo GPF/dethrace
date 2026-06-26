@@ -63,7 +63,6 @@ void PlaySmackerFile(char* pSmack_name) {
     Smack* smk;
     int i;
     int j;
-    int len;
     int fuck_off;
     LOG_TRACE("(\"%s\")", pSmack_name);
 
@@ -78,6 +77,7 @@ void PlaySmackerFile(char* pSmack_name) {
         dr_dprintf("Trying to open smack file '%s'", the_path);
         smk = SmackOpen(the_path, SMACKTRACKS, SMACKAUTOEXTRA);
         if (smk == NULL) {
+#ifndef __DREAMCAST__
             dr_dprintf("Unable to open smack file - attempt to load smack from CD...");
             if (GetCDPathFromPathsTxtFile(the_path)) {
                 strcat(the_path, gDir_separator);
@@ -90,6 +90,9 @@ void PlaySmackerFile(char* pSmack_name) {
             } else {
                 dr_dprintf("Can't get CD directory name");
             }
+#else
+            dr_dprintf("Unable to open smack file '%s' on Dreamcast install", pSmack_name);
+#endif
         }
         if (smk != NULL) {
             dr_dprintf("Smack file opened OK");
@@ -105,15 +108,14 @@ void PlaySmackerFile(char* pSmack_name) {
                     // TOOD: remove the commented-out line below when smk->NewPalette is set correctly per-frame
                     // memset(gBack_screen->pixels, 0, gBack_screen->row_bytes * gBack_screen->height);
                     DRSetPalette(gCurrent_palette);
-                    PDScreenBufferSwap(0);
                     EnsurePaletteUp();
                 }
 
                 SmackDoFrame(smk);
+                PDScreenBufferSwap(0);
                 if (i != smk->Frames) {
                     SmackNextFrame(smk);
                 }
-                PDScreenBufferSwap(0);
 
                 do {
                     fuck_off = AnyKeyDown() || EitherMouseButtonDown();
@@ -128,7 +130,6 @@ void PlaySmackerFile(char* pSmack_name) {
         } else {
             dr_dprintf("Smack file '%s' failed to open", pSmack_name);
         }
-        StartMusic();
     }
 }
 
@@ -138,6 +139,7 @@ void DoOpeningAnimation(void) {
 
     PlaySmackerFile("LOGO.SMK");
     PlaySmackerFile(harness_game_info.defines.INTRO_SMK_FILE);
+    StartMusic();
     WaitForNoKeys();
 }
 
@@ -156,6 +158,7 @@ void DoGoToRaceAnimation(void) {
         } else {
             PlaySmackerFile("GARAGE1.SMK");
         }
+        StartMusic();
     }
 }
 
@@ -181,6 +184,7 @@ void DoEndRaceAnimation(void) {
         } else {
             PlaySmackerFile("UNSUCSES.SMK");
         }
+        StartMusic();
     }
 }
 
@@ -222,6 +226,7 @@ void DoFullVersionPowerpoint(void) {
     DRSetPalette(gRender_palette);
     if (harness_game_info.mode == eGame_splatpack_demo) {
         PlaySmackerFile("DEMOEND.SMK");
+        StartMusic();
     } else {
         ShowCutScene(9, 0, 8503, gCut_delay_4);
     }

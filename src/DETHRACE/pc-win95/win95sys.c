@@ -21,6 +21,9 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <time.h>
+#ifdef __DREAMCAST__
+#include <dirent.h>
+#endif
 
 #include "harness/win95_polyfill.h"
 
@@ -124,6 +127,7 @@ void KeyTranslation(tU8 pKey_index, tU8 pScan_code_1, tU8 pScan_code_2) {
 }
 
 void KeyBegin(void) {
+    printf("KeyBegin: Initializing key scan codes\n");
     gScan_code[KEY_0] = DIK_0;
     gScan_code[KEY_1] = DIK_1;
     gScan_code[KEY_2] = DIK_2;
@@ -231,6 +235,7 @@ void KeyBegin(void) {
     gScan_code[KEY_SHIFT_ANY] = 0xff;
     gScan_code[KEY_ALT_ANY] = 0xff;
     gScan_code[KEY_CTRL_ANY] = 0xff;
+    printf("KeyBegin: done\n");
 }
 
 void KeyEnd(void) {
@@ -367,9 +372,12 @@ void PDInitialiseSystem(void) {
     Win32CreateWindow();
     ShowCursor_(0);
     KeyBegin();
+    printf("PDInitialiseSystem: after KeyBegin\n");
 
     PathCat(the_path, gApplication_path, "KEYBOARD.COK");
+    printf("PDInitialiseSystem: opening keyboard file %s\n", the_path);
     f = fopen(the_path, "rb");
+    printf("PDInitialiseSystem: keyboard fopen result %p\n", (void*)f);
     if (f == NULL) {
         if (harness_game_info.defines.requires_ascii_table) {
 #if !defined(DETHRACE_FIX_BUGS)
@@ -399,6 +407,7 @@ void PDInitialiseSystem(void) {
 #endif
     }
     Win32InitInputDevice();
+    printf("PDInitialiseSystem: after Win32InitInputDevice\n");
 }
 
 void Win32CreateWindow(void) {
@@ -683,14 +692,38 @@ void PDSetFileVariables(void) {
 }
 
 void PDBuildAppPath(char* pThe_path) {
+#ifdef __DREAMCAST__
+    pThe_path[0] = '\0';
+#else
     GetCurrentDirectoryA_(253, pThe_path);
     // GetShortPathNameA(pThe_path, pThe_path, 253);
     strcat(pThe_path, "/"); // original: strcat(pThe_path, "\\")
+#endif
     dr_dprintf("Application path '%s'", pThe_path);
 }
 
 void PDForEveryFile(char* pThe_path, void (*pAction_routine)(char*)) {
     char found_path[256];        // [esp+Ch] [ebp-448h] BYREF
+#ifdef __DREAMCAST__
+    DIR* dir;
+    struct dirent* entry;
+
+    dir = opendir(pThe_path);
+    if (dir == NULL) {
+        return;
+    }
+    while ((entry = readdir(dir)) != NULL) {
+        if (entry->d_name[0] == '.') {
+            continue;
+        }
+        if (entry->d_type != DT_REG && entry->d_type != DT_UNKNOWN) {
+            continue;
+        }
+        PathCat(found_path, pThe_path, entry->d_name);
+        pAction_routine(found_path);
+    }
+    closedir(dir);
+#else
     WIN32_FIND_DATAA_ find_data; // [esp+10Ch] [ebp-348h] BYREF
     HANDLE_ hFindFile;           // [esp+24Ch] [ebp-208h]
     char file_filter[256];       // [esp+250h] [ebp-204h] BYREF
@@ -709,6 +742,7 @@ void PDForEveryFile(char* pThe_path, void (*pAction_routine)(char*)) {
         }
         SetCurrentDirectoryA_(current_dir);
     }
+#endif
 }
 
 void PDSetPalette(br_pixelmap* pThe_palette) {

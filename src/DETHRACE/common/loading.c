@@ -3,6 +3,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef __DREAMCAST__
+#include <dirent.h>
+#endif
 
 #include "brender.h"
 #include "brucetrk.h"
@@ -351,7 +354,9 @@ void LoadGeneralParameters(void) {
     char *saveptr;
     PathCat(the_path, gApplication_path, "ACTORS");
     PathCat(the_path, the_path, "PROG.ACT");
+    printf("Loading PROG.ACT from %s\n", the_path);
     f = fopen(the_path, "rb");
+    printf("PROG.ACT fopen result: %p\n", (void*)f);
     if (f != NULL) {
         fgets(s, sizeof(s) - 1, f);
         fclose(f);
@@ -373,6 +378,7 @@ void LoadGeneralParameters(void) {
         }
     }
     PathCat(the_path, gApplication_path, "GENERAL.TXT");
+    printf("Loading GENERAL.TXT from %s\n", the_path);
     f = DRfopen(the_path, "rt");
     if (f == NULL) {
         FatalError(kFatalError_SettingsFile);
@@ -418,6 +424,7 @@ void LoadGeneralParameters(void) {
             GetALineAndDontArgue(f, s);
         }
     }
+    printf("I am here\n");
     GetThreeInts(f, gJump_start_fine, &gJump_start_fine[1], &gJump_start_fine[2]);
     GetThreeInts(f, gPoints_per_second, &gPoints_per_second[1], &gPoints_per_second[2]);
     GetThreeInts(f, gCunning_stunt_bonus, &gCunning_stunt_bonus[1], &gCunning_stunt_bonus[2]);
@@ -683,7 +690,30 @@ void DRLoadLights(char* pPath_name) {
 // IDA: void __usercall LoadInFiles(char *pThe_base_path@<EAX>, char *pThe_dir_name@<EDX>, void (*pLoad_routine)(char*)@<EBX>)
 void LoadInFiles(char* pThe_base_path, char* pThe_dir_name, void (*pLoad_routine)(char*)) {
     tPath_name the_path;
+#ifdef __DREAMCAST__
+    DIR* dir;
+    struct dirent* entry;
+    int found_dir;
+#endif
     LOG_TRACE("(\"%s\", \"%s\", %p)", pThe_base_path, pThe_dir_name, pLoad_routine);
+
+#ifdef __DREAMCAST__
+    found_dir = 0;
+    dir = opendir(pThe_base_path);
+    if (dir == NULL) {
+        return;
+    }
+    while ((entry = readdir(dir)) != NULL) {
+        if (strcasecmp(entry->d_name, pThe_dir_name) == 0) {
+            found_dir = 1;
+            break;
+        }
+    }
+    closedir(dir);
+    if (!found_dir) {
+        return;
+    }
+#endif
 
     PathCat(the_path, pThe_base_path, pThe_dir_name);
     PDForEveryFile(the_path, pLoad_routine);
@@ -3218,11 +3248,15 @@ FILE* OldDRfopen(char* pFilename, char* pMode) {
     static int source_exists = 1;
     int len;
     char ch;
-
+    if (harness_game_config.verbose) {
+        printf("Opening file: %s with mode: %s\n", pFilename, pMode);
+    }
     LOG_TRACE("(\"%s\", \"%s\")", pFilename, pMode);
 
     fp = Harness_Hook_fopen(pFilename, pMode);
-
+    if (harness_game_config.verbose) {
+        printf("Harness_Hook_fopen result: %p\n", fp);
+    }
     if (fp != NULL) {
 
         // Demo does not check gDecode_thing ("i am fiddling" in PROG.ACT)
@@ -3331,10 +3365,15 @@ FILE* DRfopen(char* pFilename, char* pMode) {
     FILE* result;
     tPath_name CD_dir;
     char msg[336];
+    if (harness_game_config.verbose) {
+        printf("Opening file: %s with mode: %s\n", pFilename, pMode);
+    }
     LOG_TRACE("(\"%s\", \"%s\")", pFilename, pMode);
 
     result = OldDRfopen(pFilename, pMode);
-
+    if (harness_game_config.verbose) {
+        printf("Result: %p\n", result);
+    }
     if (result == NULL && !gAllow_open_to_fail) {
         if (GetCDPathFromPathsTxtFile(CD_dir) && !PDCheckDriveExists(CD_dir)) {
             if (gMisc_strings[0]) {
@@ -3351,6 +3390,10 @@ FILE* DRfopen(char* pFilename, char* pMode) {
 
 // IDA: int __usercall GetCDPathFromPathsTxtFile@<EAX>(char *pPath_name@<EAX>)
 int GetCDPathFromPathsTxtFile(char* pPath_name) {
+#ifdef __DREAMCAST__
+    (void)pPath_name;
+    return 0;
+#else
     static int got_it_already = 0;
     static tPath_name cd_pathname;
     FILE* paths_txt_fp;
@@ -3369,10 +3412,14 @@ int GetCDPathFromPathsTxtFile(char* pPath_name) {
     }
     memcpy(pPath_name, cd_pathname, 256);
     return 1;
+#endif
 }
 
 // IDA: int __cdecl TestForOriginalCarmaCDinDrive()
 int TestForOriginalCarmaCDinDrive(void) {
+#ifdef __DREAMCAST__
+    return 1;
+#else
     // The symbol dump didn't include any local variable information.
     // These names are not necessarily the original names.
     tPath_name cd_pathname;
@@ -3436,6 +3483,7 @@ int TestForOriginalCarmaCDinDrive(void) {
         EncodeFile(paths_txt);
     }
     return 1;
+#endif
 }
 
 // IDA: int __cdecl OriginalCarmaCDinDrive()

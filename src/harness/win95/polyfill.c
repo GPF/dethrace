@@ -180,8 +180,13 @@ int SetWindowPos_(void* hWnd, void* hWndInsertAfter, int X, int Y, int cx, int c
 }
 
 int ShowCursor_(int bShow) {
+#ifdef __DREAMCAST__
+    (void)bShow;
+    return 0;
+#else
     gHarness_platform.ShowCursor(bShow);
     return 0;
+#endif
 }
 
 int SendMessageA_(void* hWnd, unsigned int Msg, unsigned int wParam, long lParam) {

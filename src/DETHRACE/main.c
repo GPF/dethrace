@@ -47,6 +47,15 @@ void BR_CALLBACK _BrEndHook(void) {
 }
 
 int main(int argc, char* argv[]) {
+#ifdef __DREAMCAST__
+    static char dreamcast_argv0[] = "dethrace";
+    static char* dreamcast_argv[] = { dreamcast_argv0, NULL };
+
+    if (argc <= 0 || argv == NULL || argv[0] == NULL) {
+        argc = 1;
+        argv = dreamcast_argv;
+    }
+#endif
 #ifdef _WIN32
     /* Attach to the console that started us if any */
     if (AttachConsole(ATTACH_PARENT_PROCESS)) {

@@ -7,6 +7,7 @@
 #include <string.h>
 
 #include "harness/hooks.h"
+#include "harness/audio.h"
 #include "harness/trace.h"
 
 // lib/libsmacker
@@ -14,9 +15,12 @@
 
 static uint32_t smack_last_frame_time = 0;
 
-static void copy_palette(Smack* smack) {
+static void copy_palette(Smack* smack, int force_update) {
     const unsigned char* pal = smk_get_palette(smack->smk_handle);
-    memcpy(smack->Palette, pal, 256 * 3);
+    smack->NewPalette = force_update || memcmp(smack->Palette, pal, 256 * 3) != 0;
+    if (smack->NewPalette) {
+        memcpy(smack->Palette, pal, 256 * 3);
+    }
 }
 
 Smack* SmackOpen(const char* name, uint32_t flags, uint32_t extrabuf) {
@@ -65,7 +69,7 @@ Smack* SmackOpen(const char* name, uint32_t flags, uint32_t extrabuf) {
         free(smack);
         return NULL;
     }
-    copy_palette(smack);
+    copy_palette(smack, 1);
     return smack;
 }
 
@@ -75,6 +79,8 @@ int SmackSoundUseDirectSound(void* dd) {
 
 void SmackToBuffer(Smack* smack, uint32_t left, uint32_t top, uint32_t pitch, uint32_t destheight, void* buf, uint32_t flags) {
     unsigned long i; // Pierre-Marie Baty -- fixed type
+    unsigned long copy_width;
+    unsigned long copy_height;
 
     // minimal implementation
     assert(left == 0);
@@ -84,8 +90,11 @@ void SmackToBuffer(Smack* smack, uint32_t left, uint32_t top, uint32_t pitch, ui
     char* char_buf = buf;
 
     const unsigned char* frame = smk_get_video(smack->smk_handle);
-    for (i = 0; i < smack->Height; i++) {
-        memcpy(&char_buf[(i * pitch)], &frame[i * smack->Width], smack->Width);
+    copy_width = smack->Width < pitch ? smack->Width : pitch;
+    copy_height = smack->Height < destheight ? smack->Height : destheight;
+
+    for (i = 0; i < copy_height; i++) {
+        memcpy(&char_buf[(i * pitch)], &frame[i * smack->Width], copy_width);
     }
 }
 
@@ -109,11 +118,12 @@ uint32_t SmackDoFrame(Smack* smack) {
 
 void SmackNextFrame(Smack* smack) {
     smk_next(smack->smk_handle);
-    copy_palette(smack);
+    copy_palette(smack, 0);
 }
 
 uint32_t SmackWait(Smack* smack) {
     uint32_t now = gHarness_platform.GetTicks();
+    AudioBackend_ServiceCDA();
     if (now < smack_last_frame_time + smack->MSPerFrame) {
         gHarness_platform.Sleep(1);
         return 1;

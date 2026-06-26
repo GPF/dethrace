@@ -48,7 +48,7 @@ void SSDXRelease(void) {}
 
 void SSDXGetWindowRect(void* hWnd) {
     // none of this is required
-
+    printf("SSDXGetWindowRect: Getting window rect for hWnd: %p\n", hWnd);
     // GetClientRect(hWnd, &gSSDX_rect);
     // ClientToScreen(hWnd, (LPPOINT)&gSSDX_rect);
     // ClientToScreen(hWnd, (LPPOINT)&gSSDX_rect.right);

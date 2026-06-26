@@ -6,6 +6,9 @@
 #include "harness/trace.h"
 #include "sdl2_scancode_to_dinput.h"
 #include "sdl2_gamepad_to_dinput.h"
+
+#include <stdint.h>
+
 SDL_Window* window;
 SDL_Renderer* renderer;
 SDL_Texture* screen_texture;
@@ -16,51 +19,64 @@ int render_width, render_height;
 Uint32 last_frame_time;
 
 uint8_t directinput_key_state[SDL_NUM_SCANCODES];
-#include <kos.h>
+
+#ifdef __DREAMCAST__
+#define DC_FRAMEBUFFER_WIDTH 320
+#define DC_FRAMEBUFFER_HEIGHT 240
+#endif
+
 static void* create_window_and_renderer(char* title, int x, int y, int width, int height) {
-    // gdb_init();
-    //dbgio_dev_select("fb");
-    //SDL_setenv("SDL_AUDIODRIVER", "dummy", 1);
     render_width = width;
     render_height = height;
-    // SDL_SetHint(SDL_HINT_VIDEO_DOUBLE_BUFFER, "1");    
-    SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_TEXTURED_VIDEO");
-    // SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_DIRECT_VIDEO"); 
+
+#ifdef __DREAMCAST__
+    int window_width = DC_FRAMEBUFFER_WIDTH;
+    int window_height = DC_FRAMEBUFFER_HEIGHT;
+    Uint32 window_flags = SDL_WINDOW_SHOWN | SDL_WINDOW_FULLSCREEN;
+
+    SDL_SetHint(SDL_HINT_VIDEO_DOUBLE_BUFFER, "1");    
+    SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_TEXTURED_STRIDED_VIDEO");
+#else
+    int window_width = width;
+    int window_height = height;
+    Uint32 window_flags = SDL_WINDOW_FULLSCREEN_DESKTOP;
+#endif
+
     if (SDL_Init(SDL_INIT_VIDEO| SDL_INIT_AUDIO | SDL_INIT_JOYSTICK| SDL_INIT_GAMECONTROLLER) != 0) {
         LOG_PANIC("SDL_INIT_VIDEO error: %s", SDL_GetError());
     }
-    SDL_ShowCursor(SDL_DISABLE);
-    // if(SDL_InitSubSystem(SDL_INIT_GAMECONTROLLER) != 0) {
-    //     LOG_WARN("SDL_INIT_GAMECONTROLLER error: %s", SDL_GetError());
-    // }
 
     window = SDL_CreateWindow(title,
         SDL_WINDOWPOS_CENTERED,
         SDL_WINDOWPOS_CENTERED,
-        width, height,
-        SDL_WINDOW_FULLSCREEN_DESKTOP);
-    printf("here6\n");
+        window_width, window_height,
+        window_flags);
     if (window == NULL) {
         LOG_PANIC("Failed to create window: %s", SDL_GetError());
     }
 
+#ifdef __DREAMCAST__
+    SDL_ShowCursor(SDL_DISABLE);
+    SDL_Surface* surface = SDL_GetWindowSurface(window);
+    if (surface == NULL) {
+        LOG_PANIC("Failed to create Dreamcast window framebuffer: %s", SDL_GetError());
+    }
+    printf("Video res: width %d. height %d\n", surface->w, surface->h);
+    return window;
+#else
     if (harness_game_config.start_full_screen) {
         SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN_DESKTOP);
     }
-    printf("here7\n");
-    // SDL_SetHint(SDL_HINT_RENDER_DRIVER, "software");
-    // SDL_SetHint(SDL_HINT_RENDER_VSYNC, "1");
-    renderer = SDL_CreateRenderer(window, 0, SDL_RENDERER_SOFTWARE); //SDL_RENDERER_PRESENTVSYNC
+
+    SDL_SetHint(SDL_HINT_RENDER_DRIVER, "software");
+    renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE);
     if (renderer == NULL) {
         LOG_PANIC("Failed to create renderer: %s", SDL_GetError());
     }
-    //printf("HERE\n");
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
-    //printf("HERE2\n");
     SDL_RenderSetLogicalSize(renderer, render_width, render_height);
-    printf("Video res: width %d. height %d\n ", width, height);
+    printf("Video res: width %d. height %d\n", width, height);
     screen_texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB1555, SDL_TEXTUREACCESS_STREAMING, width, height); // 320x200
-    //printf("HERE4\n");
     if (screen_texture == NULL) {
         SDL_RendererInfo info;
         SDL_GetRendererInfo(renderer, &info);
@@ -69,24 +85,33 @@ static void* create_window_and_renderer(char* title, int x, int y, int width, in
         }
         LOG_PANIC("Failed to create screen_texture: %s", SDL_GetError());
     }
-    printf("HERE5\n");
     return window;
+#endif
 }
 
 static int set_window_pos(void* hWnd, int x, int y, int nWidth, int nHeight) {
-// #ifndef __DREAMCAST__    
+#ifdef __DREAMCAST__
+    return 0;
+#else
     // SDL_SetWindowPosition(hWnd, x, y);
     if (nWidth == 320 && nHeight == 200) {
         nWidth = 640;
         nHeight = 400;
     }
     SDL_SetWindowSize(hWnd, nWidth, nHeight);
-// #endif    
     return 0;
+#endif
 }
 
 static void destroy_window(void* hWnd) {
-    // SDL_GL_DeleteContext(context);
+    if (screen_texture != NULL) {
+        SDL_DestroyTexture(screen_texture);
+        screen_texture = NULL;
+    }
+    if (renderer != NULL) {
+        SDL_DestroyRenderer(renderer);
+        renderer = NULL;
+    }
     SDL_DestroyWindow(window);
     SDL_Quit();
     window = NULL;
@@ -180,7 +205,15 @@ static int get_mouse_position(int* pX, int* pY) {
         return 0;
     }
     SDL_GetMouseState(pX, pY);
-    SDL_RenderWindowToLogical(renderer, *pX, *pY, &lX, &lY);
+    if (renderer != NULL) {
+        SDL_RenderWindowToLogical(renderer, *pX, *pY, &lX, &lY);
+    } else {
+        int window_w;
+        int window_h;
+        SDL_GetWindowSize(window, &window_w, &window_h);
+        lX = window_w != 0 ? (float)*pX * render_width / window_w : 0.0f;
+        lY = window_h != 0 ? (float)*pY * render_height / window_h : 0.0f;
+    }
 
 #if defined(DETHRACE_FIX_BUGS)
     // In hires mode (640x480), the menus are still rendered at (320x240),
@@ -210,81 +243,64 @@ static void limit_fps(void) {
     last_frame_time = SDL_GetTicks();
 }
 
-static uint16_t converted_palette[256]; // Change to 16-bit for RGB565
+static uint16_t converted_palette[256];
 
 static void present_screen(br_pixelmap* src) {
-    #define VRAM_B(n) ((void *)(((uintptr_t)PVR_TA_TEX_MEM_32) + ((uintptr_t)vram_s - PVR_RAM_BASE) + (n))) // Fixed missing parenthesis
-    #define SQ_WRITE(sq, off) do { \
-            const uint16_t value = converted_palette[src_pixels[r * 320 + c + off]]; \
-            sq[r * 640 + c + off] = (value << 16) | value; \
-        } while(0)
-    
-    const uint8_t* src_pixels = src->pixels;
-    uint32_t *sq = sq_lock(VRAM_B(40 * 640 * 2));
-    uint32_t *sq2 = SQ_MASK_DEST(VRAM_B(41 * 640 * 2));
-    
-    for(int r = 0; r < 200; ++r) {
-        int c;
-        for (c = 0; c <= 320 - 32; c += 32) {
-            dcache_pref_block(&src_pixels[r * 320 + c + 32]);
-    
-            SQ_WRITE(sq, 0);
-            SQ_WRITE(sq, 1);
-            SQ_WRITE(sq, 2);
-            SQ_WRITE(sq, 3);
-            SQ_WRITE(sq, 4);
-            SQ_WRITE(sq, 5);
-            SQ_WRITE(sq, 6);
-            SQ_WRITE(sq, 7);
-            sq_flush(&sq[r * 640 + c + 0]);
-            sq_flush(&sq2[r * 640 + c + 0]);
-    
-            SQ_WRITE(sq, 8);
-            SQ_WRITE(sq, 9);
-            SQ_WRITE(sq,10);
-            SQ_WRITE(sq,11);
-            SQ_WRITE(sq,12);
-            SQ_WRITE(sq,13);
-            SQ_WRITE(sq,14);
-            SQ_WRITE(sq,15);
-            sq_flush(&sq[r * 640 + c + 8]);
-            sq_flush(&sq2[r * 640 + c + 8]);
-    
-            SQ_WRITE(sq, 16);
-            SQ_WRITE(sq, 17);
-            SQ_WRITE(sq, 18);
-            SQ_WRITE(sq, 19);
-            SQ_WRITE(sq, 20);
-            SQ_WRITE(sq, 21);
-            SQ_WRITE(sq, 22);
-            SQ_WRITE(sq, 23);
-            sq_flush(&sq[r * 640 + c + 16]);
-            sq_flush(&sq2[r * 640 + c + 16]);
-    
-            SQ_WRITE(sq, 24);
-            SQ_WRITE(sq, 25);
-            SQ_WRITE(sq, 26);
-            SQ_WRITE(sq, 27);
-            SQ_WRITE(sq, 28);
-            SQ_WRITE(sq, 29);
-            SQ_WRITE(sq, 30);
-            SQ_WRITE(sq, 31);
-            sq_flush(&sq[r * 640 + c + 24]);
-            sq_flush(&sq2[r * 640 + c + 24]);
+#ifdef __DREAMCAST__
+    SDL_Surface* surface;
+    int copy_w;
+    int copy_h;
+    int y_offset;
+
+    if (window == NULL || src == NULL || src->pixels == NULL) {
+        return;
+    }
+
+    surface = SDL_GetWindowSurface(window);
+    if (surface == NULL) {
+        LOG_WARN("SDL_GetWindowSurface failed: %s", SDL_GetError());
+        return;
+    }
+
+    if (SDL_MUSTLOCK(surface) && SDL_LockSurface(surface) != 0) {
+        LOG_WARN("SDL_LockSurface failed: %s", SDL_GetError());
+        return;
+    }
+
+    memset(surface->pixels, 0, surface->h * surface->pitch);
+
+    copy_w = src->width < DC_FRAMEBUFFER_WIDTH ? src->width : DC_FRAMEBUFFER_WIDTH;
+    copy_h = src->height < DC_FRAMEBUFFER_HEIGHT ? src->height : DC_FRAMEBUFFER_HEIGHT;
+    y_offset = (surface->h - copy_h) / 2;
+
+    for (int y = 0; y < copy_h; y++) {
+        const uint8_t* src_row = (const uint8_t*)src->pixels + y * src->row_bytes;
+        uint16_t* dst_row = (uint16_t*)((uint8_t*)surface->pixels + (y + y_offset) * surface->pitch);
+
+        for (int x = 0; x < copy_w; x++) {
+            dst_row[x] = converted_palette[src_row[x]];
         }
     }
-    sq_unlock();
+
+    if (SDL_MUSTLOCK(surface)) {
+        SDL_UnlockSurface(surface);
+    }
+    SDL_UpdateWindowSurface(window);
+#else
+    SDL_UpdateTexture(screen_texture, NULL, src->pixels, src->row_bytes);
+    SDL_RenderClear(renderer);
+    SDL_RenderCopy(renderer, screen_texture, NULL, NULL);
+    SDL_RenderPresent(renderer);
+#endif
 }
 
 static void set_palette(PALETTEENTRY_* pal) {
     for (int i = 0; i < 256; i++) {
-        // Convert 8-bit color components to 5-6-5 RGB565 format
-        uint16_t red = (pal[i].peRed >> 3) & 0x1F;   // 5 bits for red
-        uint16_t green = (pal[i].peGreen >> 2) & 0x3F; // 6 bits for green
-        uint16_t blue = (pal[i].peBlue >> 3) & 0x1F;  // 5 bits for blue
+        uint16_t red = (pal[i].peRed >> 3) & 0x1F;
+        uint16_t green = (pal[i].peGreen >> 3) & 0x1F;
+        uint16_t blue = (pal[i].peBlue >> 3) & 0x1F;
 
-        // Pack into 16-bit RGB565 format
-        converted_palette[i] = (red << 11) | (green << 5) | blue;
+        converted_palette[i] = 0x8000 | (red << 10) | (green << 5) | blue;
     }
 }
 

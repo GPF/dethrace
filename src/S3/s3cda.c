@@ -1,4 +1,5 @@
 #include "s3cda.h"
+#include <stdio.h>
 #include "harness/audio.h"
 #include "harness/trace.h"
 #include "s3.h"
@@ -39,9 +40,12 @@ int S3PlayCDA(tS3_channel* chan) {
     int track;
     if (gS3_cda_enabled) {
         track = strtoul(chan->descriptor->filename, NULL, 10);
+        printf("S3PlayCDA: track=%d begin\n", track);
         if (AudioBackend_PlayCDA(track) == eAB_error) {
+            printf("S3PlayCDA: track=%d failed\n", track);
             return eS3_error_start_cda;
         }
+        printf("S3PlayCDA: track=%d complete\n", track);
     }
     return eS3_error_none;
 }

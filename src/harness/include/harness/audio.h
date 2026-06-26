@@ -27,6 +27,7 @@ tAudioBackend_error_code AudioBackend_PlayCDA(int track);
 tAudioBackend_error_code AudioBackend_StopCDA(void);
 int AudioBackend_CDAIsPlaying(void);
 tAudioBackend_error_code AudioBackend_SetCDAVolume(int volume);
+void AudioBackend_ServiceCDA(void);
 
 // Used by smackw32
 tAudioBackend_stream* AudioBackend_StreamOpen(int bitdepth, int channels, unsigned int sample_rate);

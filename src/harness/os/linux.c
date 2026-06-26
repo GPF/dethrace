@@ -292,10 +292,38 @@ void OS_InstallSignalHandler(char* program_name) {
 }
 
 FILE* OS_fopen(const char* pathname, const char* mode) {
+    char dreamcast_mode[8];
+#ifdef __DREAMCAST__
+    char dreamcast_path[512];
+    int j = 0;
+    for (int i = 0; mode[i] != '\0' && j < (int)sizeof(dreamcast_mode) - 1; i++) {
+        if (mode[i] != 't') {
+            dreamcast_mode[j++] = mode[i];
+        }
+    }
+    dreamcast_mode[j] = '\0';
+    mode = dreamcast_mode;
+#endif
+
     FILE* f = fopen(pathname, mode);
     if (f != NULL) {
         return f;
     }
+#ifdef __DREAMCAST__
+    if (pathname[0] != '/') {
+        snprintf(dreamcast_path, sizeof(dreamcast_path), "/cd/DETHRACE/%s", pathname);
+        f = fopen(dreamcast_path, mode);
+        if (f != NULL) {
+            return f;
+        }
+
+        snprintf(dreamcast_path, sizeof(dreamcast_path), "/cd/dethrace/%s", pathname);
+        f = fopen(dreamcast_path, mode);
+        if (f != NULL) {
+            return f;
+        }
+    }
+#endif
     char buffer[512];
     char buffer2[512];
     strcpy(buffer, pathname);
